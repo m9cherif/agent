@@ -1,178 +1,61 @@
-# JARVIS - Windows AI Desktop Assistant
+# J.A.R.V.I.S — Autonomous AI Desktop Assistant
 
-A modular, agent-based desktop assistant for Windows with OpenRouter AI backend, voice pipeline, and extensible tool system.
+Voice-first AI assistant with real-time screen vision, mouse/keyboard control, and 57+ tools. Powered by OpenRouter.
 
-## Architecture
+## Features
 
-```
-┌─────────────────────────────────────────────────┐
-│                    JARVIS Core                    │
-│  ┌──────────┐  ┌──────────┐  ┌────────────────┐ │
-│  │   Tray   │  │   Chat   │  │   Settings     │ │
-│  │  Manager │  │   Panel  │  │   Dialog       │ │
-│  └────┬─────┘  └────┬─────┘  └───────┬────────┘ │
-│       │              │               │           │
-│  ┌────▼──────────────▼───────────────▼────────┐ │
-│  │           Agent Orchestrator               │ │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐ │ │
-│  │  │ ReAct    │  │ Tool     │  │ Memory   │ │ │
-│  │  │ Loop     │  │ Registry │  │ Store    │ │ │
-│  │  └──────────┘  └──────────┘  └──────────┘ │ │
-│  └───────────────────┬────────────────────────┘ │
-│                      │                          │
-│  ┌───────────────────▼────────────────────────┐ │
-│  │              AI Engine                      │ │
-│  │  ┌──────────────────────────────────────┐  │ │
-│  │  │         OpenRouter Client            │  │ │
-│  │  │  POST /api/v1/chat/completions       │  │ │
-│  │  └──────────────────────────────────────┘  │ │
-│  └───────────────────┬────────────────────────┘ │
-│                      │                          │
-│  ┌───────────────────▼────────────────────────┐ │
-│  │              Tools Layer                    │ │
-│  │  WebSearch │ FileIO │ System │ Calculator  │ │
-│  │  Desktop Auto │ Browser Auto │ Plugin Sys │ │
-│  └───────────────────┬────────────────────────┘ │
-│                      │                          │
-│  ┌───────────────────▼────────────────────────┐ │
-│  │           Voice Pipeline (Python)          │ │
-│  │  Sherpa ONNX │ Whisper.cpp │ Coqui Piper   │ │
-│  │  (Wake Word)  │    (STT)    │    (TTS)     │ │
-│  └─────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────┘
-```
-
-## Prerequisites
-
-- Windows 10/11 64-bit
-- Visual Studio 2022 (with C++ tools)
-- CMake 3.20+
-- Qt 6.5+
-- Python 3.10+
-- OpenRouter API key (free tier available)
+- **Voice Interface** — British male JARVIS voice (edge-tts), SAPI fallback
+- **Real-time Screen Vision** — Background 2fps capture, frame differencing, change detection
+- **Full Desktop Control** — Mouse move/click/drag/scroll, keyboard type/hotkeys via `SendInput`
+- **57+ Tools** — Screen watch, window management, file ops, web search, OCR, calculator, weather, notes, todo, crypto, QR, clipboard, translation, and more
+- **Unlimited Tool Chaining** — AI calls tools recursively until your task is done
+- **Iron Man HUD** — Animated eye, radar sweep, rotating hex, scanning arcs, data readouts
+- **Sound Effects** — Startup chime, message/thinking/done/error sounds
 
 ## Quick Start
 
 ```bash
-# 1. Clone and setup
-git clone <repo> && cd jarvis
-scripts\install_deps.bat
+# Windows
+requirements.bat
 
-# 2. Configure API key
+# Kali Linux / Debian
+chmod +x requirements.sh && ./requirements.sh
+```
+
+```bash
+# Configure API key
 copy .env.example .env
-# Edit .env with your OPENROUTER_API_KEY
+# Edit .env — set OPENROUTER_API_KEY
 
-# 3. Build
-scripts\build.bat
-
-# 4. Download voice models (optional)
-scripts\download_models.bat
-
-# 5. Run
-dist\Jarvis.exe
+# Launch
+python -m jarvis_app.main
 ```
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OPENROUTER_API_KEY` | OpenRouter API key | - |
-| `OPENROUTER_BASE_URL` | API base URL | `https://openrouter.ai/api/v1` |
-| `JARVIS_MODEL` | LLM model | `openrouter/free` |
-| `JARVIS_GOVERNANCE_LEVEL` | Security level (0-2) | `1` |
+| `OPENROUTER_API_KEY` | OpenRouter API key (required) | — |
+| `OPENROUTER_BASE_URL` | API endpoint | `https://openrouter.ai/api/v1` |
+| `JARVIS_MODEL` | LLM model | `google/gemini-2.0-flash-exp:free` |
+| `JARVIS_GOVERNANCE_LEVEL` | Security (0=all, 1=blocked, 2=read-only) | `1` |
 
-## Voice Pipeline
+## Tools
 
-- **Wake Word**: Sherpa-ONNX detects "Hey Jarvis"
-- **STT**: Whisper.cpp transcribes speech to text
-- **TTS**: Coqui Piper synthesizes responses
+`web_search`, `file_read`, `file_write`, `run_command`, `calculator`, `weather`, `time`, `system_info`, `screenshot`, `vision`, `ocr`, `screen_watch`, `input_control`, `window(list/maximize/minimize/focus/close/move)`, `volume`, `media`, `notification`, `disk(cpu/ram/disk)`, `idle`, `browser`, `wallpaper`, `lock`, `env`, `color`, `unit`, `math_eval`, `notes`, `todo`, `todowrite`, `clipboard`, `define`, `joke`, `quote`, `random`, `convert`, `translate`, `audio`, `network`, `crypto`, `qr_code`, `json`, `hash`, `archive`, `news`, `shorten`, `ip_geo`, `process`, `file_search`, `password`, `edit`, `grep`, `glob`, `apply_patch`, `webfetch`, `question`, `skill`, `battery` — **57 total**
 
-```bash
-# Test components individually
-python src/python/jarvis_voice/wake_word.py
-python src/python/jarvis_voice/stt_engine.py --duration 5
-python src/python/jarvis_voice/tts_engine.py "Hello, I am JARVIS"
-```
+## Voice Commands
 
-## Tool System
-
-Tools are registered in the agent orchestrator and called via the ReAct loop:
-
-| Tool | Description |
-|------|-------------|
-| `web_search` | DuckDuckGo search |
-| `file_read` | Read file contents |
-| `file_write` | Write to files |
-| `run_command` | Execute system commands |
-| `calculator` | Evaluate math expressions |
-| `browser` | Playwright browser automation |
-| `desktop` | PyAutoGUI desktop control |
-
-## Plugin System
-
-Plugins live in `plugins/` with a `manifest.json`:
-
-```json
-{
-    "name": "my_skill",
-    "version": "1.0.0",
-    "entry_point": "plugin.py",
-    "type": "python",
-    "tools": [{"name": "my_tool", "description": "..."}]
-}
-```
+- "click" / "right click" / "double click" — instant mouse actions (bypasses AI)
+- "move mouse to X Y" — instant cursor movement
+- "scroll up/down N" — instant scroll
 
 ## Security
 
 Governance levels control tool access:
-- **0 (Low)**: All tools allowed
-- **1 (Medium)**: Destructive actions blocked (default)
-- **2 (High)**: Read-only tools, system commands blocked
-
-Credentials are encrypted with XOR + Base64 using a derived key.
-
-## Project Structure
-
-```
-src/jarvis/          # C++ Qt application
-  core/              # Config, Agent, ReAct, ToolRegistry
-  ai/                 # AIEngine, OpenRouterClient
-  ui/                # MainWindow, ChatPanel, Settings, Tray
-  tools/             # WebSearch, FileIO, System, Calculator
-  memory/            # SQLite MemoryStore
-  security/          # Governance, CredentialManager
-  plugins/           # PluginLoader
-  voice/             # VoicePipeline (C++ process bridge)
-
-src/python/          # Python workers
-  jarvis_voice/      # Wake word, STT, TTS
-  jarvis_tools/      # Desktop, Browser, System automation
-
-tests/               # C++ and Python tests
-scripts/             # Build, install, package scripts
-plugins/             # Plugin examples
-```
-
-## Development
-
-```bash
-# Run C++ tests
-cmake -B build -DBUILD_TESTING=ON
-cmake --build build
-build\tests\CppTests\Release\TestJarvis.exe
-
-# Run Python tests
-pytest tests/PythonTests/ -v
-
-# Package
-scripts\package.bat --portable
-```
-
-## Roadmap
-
-- **MVP**: Voice interaction, chat UI, agent logic, LLM backend, basic tools, memory, security
-- **v1**: Desktop/browser automation, plugin system, screen context, multi-user
-- **Future**: Voice cloning, proactive assistant, cross-device, AR integration
+- **0 (Low)** — All tools allowed
+- **1 (Medium)** — Destructive actions blocked (default)
+- **2 (High)** — Read-only tools, system commands blocked
 
 ## License
 

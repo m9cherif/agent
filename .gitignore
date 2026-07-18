@@ -9,3 +9,8 @@ build/
 *.mp3
 .todo_cache.json
 *.session
+.opencode/node_modules/
+.opencode/.gitignore
+.opencode/package.json
+.opencode/package-lock.json
+.opencode/tool/
