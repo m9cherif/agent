@@ -10,7 +10,7 @@ python -m pip install --upgrade pip
 
 :: Core dependencies
 echo [1/2] Installing core packages...
-pip install requests urllib3 edge-tts pyttsx3 comtypes
+pip install requests urllib3 edge-tts pyttsx3 pywin32 comtypes
 
 :: Optional: Wake word listener
 echo [2/2] Installing wake word support...
