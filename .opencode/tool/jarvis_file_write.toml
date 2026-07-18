@@ -1,0 +1,26 @@
+---
+tool: jarvis_file_write
+description: Write content to a file
+parameters:
+  type: object
+  properties:
+    path:
+      type: string
+      description: File path to write
+    content:
+      type: string
+      description: Content to write
+  required: [path, content]
+---
+
+import os
+
+def main(path: str, content: str) -> dict:
+    try:
+        path = os.path.abspath(path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return {"success": True, "result": f"Saved to {os.path.basename(path)}"}
+    except Exception as e:
+        return {"success": False, "error": f"File write error: {e}"}

@@ -1,0 +1,33 @@
+---
+tool: jarvis_clipboard
+description: Get or set clipboard content
+parameters:
+  type: object
+  properties:
+    action:
+      type: string
+      enum: [get, set]
+      description: Action to perform
+    text:
+      type: string
+      description: Text to set (for set action)
+  required: [action]
+---
+
+def main(action: str, text: str = "") -> dict:
+    try:
+        import pyperclip
+        
+        if action == "get":
+            content = pyperclip.paste()
+            return {"success": True, "result": f"Clipboard: {content[:500]}"}
+        
+        elif action == "set":
+            pyperclip.copy(text)
+            return {"success": True, "result": f"Copied: {text[:100]}"}
+        
+        return {"success": False, "error": "Actions: get, set"}
+    except ImportError:
+        return {"success": False, "error": "pyperclip not installed"}
+    except Exception as e:
+        return {"success": False, "error": f"Clipboard error: {e}"}

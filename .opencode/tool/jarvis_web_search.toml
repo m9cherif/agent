@@ -1,0 +1,47 @@
+---
+tool: jarvis_web_search
+description: Search the web using DuckDuckGo
+parameters:
+  type: object
+  properties:
+    query:
+      type: string
+      description: Search query
+  required: [query]
+---
+
+import urllib.request
+import urllib.parse
+import json
+import re
+
+def main(query: str) -> dict:
+    try:
+        url = "https://api.duckduckgo.com/?" + urllib.parse.urlencode({
+            "q": query, "format": "json", "no_html": "1", "skip_disambig": "1"
+        })
+        req = urllib.request.Request(url, headers={"User-Agent": "JarvisAssistant/2.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+        
+        abstract = data.get("Abstract", "") or data.get("AbstractText", "")
+        source = data.get("AbstractSource", "")
+        heading = data.get("Heading", "")
+        
+        if not abstract:
+            topics = data.get("RelatedTopics", [])
+            if topics:
+                first = topics[0]
+                if isinstance(first, dict):
+                    text = first.get("Text", first.get("Result", ""))
+                    abstract = re.sub(r'<[^>]+>', '', text)
+        
+        result = abstract or "No results found"
+        if heading:
+            result = f"**{heading}**\n{result}"
+        if source:
+            result += f"\n*Source: {source}*"
+        
+        return {"success": True, "result": result}
+    except Exception as e:
+        return {"success": False, "error": f"Search error: {e}"}

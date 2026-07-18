@@ -1,0 +1,126 @@
+"""OpenRouter AI Engine for JARVIS - Optimized for Speed"""
+
+import json
+import os
+import threading
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+
+class AIEngine:
+    # Ordered by speed (fastest first) - models that output correct JSON tool calls first
+    FREE_MODELS = [
+        "google/gemini-2.0-flash-exp:free",          # Fastest, correct JSON
+        "tencent/hy3:free",                          # Fast, correct JSON output
+        "openrouter/free",                           # Auto-routes
+        "poolside/laguna-xs-2.1:free",               # Tiny, correct JSON output
+        "nvidia/nemotron-3-nano-30b-a3b:free",       # Chain-of-thought
+    ]
+
+    def __init__(self):
+        self.api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        self.base_url = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+        self.model = os.environ.get("JARVIS_MODEL", "tencent/hy3:free")
+        
+        # Connection pooling for reuse
+        self._session = requests.Session()
+        adapter = HTTPAdapter(
+            pool_connections=5,
+            pool_maxsize=10,
+            max_retries=Retry(total=1, backoff_factor=0.1, status_forcelist=[429, 500, 502, 503, 504])
+        )
+        self._session.mount("https://", adapter)
+
+    def get_model(self):
+        return os.environ.get("JARVIS_MODEL", self.model)
+
+    def set_model(self, model_name):
+        if model_name in self.FREE_MODELS or model_name == self.FREE_MODELS[0]:
+            self.model = model_name
+            os.environ["JARVIS_MODEL"] = model_name
+            return True
+        # Allow setting any model string
+        self.model = model_name
+        os.environ["JARVIS_MODEL"] = model_name
+        return True
+
+    def list_models(self):
+        return list(self.FREE_MODELS)
+
+    def is_configured(self):
+        return bool(self.api_key)
+
+    def send_message(self, messages, on_chunk=None, on_complete=None):
+        model = os.environ.get("JARVIS_MODEL", self.model) or "tencent/hy3:free"
+
+        def _request(models_to_try=None):
+            if models_to_try is None:
+                models_to_try = [model] + [m for m in self.FREE_MODELS if m != model]
+
+            for m in models_to_try:
+                try:
+                    url = f"{self.base_url}/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        "HTTP-Referer": "https://github.com/jarvis-assistant",
+                        "X-Title": "JARVIS Desktop Assistant",
+                    }
+                    payload = {
+                        "model": m,
+                        "messages": messages,
+                        "max_tokens": 8192,  # Unlimited for full responses
+                        "temperature": 0.1,
+                        "stream": True,
+                    }
+
+                    resp = self._session.post(url, headers=headers, json=payload, timeout=120, stream=True)
+
+                    if resp.status_code == 429:
+                        continue
+                    if resp.status_code != 200:
+                        err = resp.json() if resp.text else {"error": {"message": f"HTTP {resp.status_code}"}}
+                        msg = err.get("error", {}).get("message", str(err))
+                        if on_complete:
+                            on_complete(False, f"API: {msg}")
+                        return
+
+                    content = ""
+                    for line in resp.iter_lines(decode_unicode=True):
+                        if not line or line.startswith(":") or line == "data: [DONE]":
+                            continue
+                        if line.startswith("data: "):
+                            try:
+                                chunk = json.loads(line[6:])
+                                delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                text = delta.get("content", "")
+                                if text:
+                                    content += text
+                                    if on_chunk:
+                                        on_chunk(text)
+                            except Exception:
+                                continue
+
+                    if on_complete:
+                        on_complete(True, content or "I'm not sure how to respond to that.")
+                    return
+
+                except requests.exceptions.ConnectionError:
+                    if on_complete:
+                        on_complete(False, "Connection failed")
+                    return
+                except requests.exceptions.Timeout:
+                    if on_complete:
+                        on_complete(False, "Timeout")
+                    return
+                except Exception as e:
+                    if on_complete:
+                        on_complete(False, str(e))
+                    return
+
+            if on_complete:
+                on_complete(False, "All models rate limited")
+
+        threading.Thread(target=_request, daemon=True).start()

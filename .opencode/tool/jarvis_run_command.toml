@@ -1,0 +1,27 @@
+---
+tool: jarvis_run_command
+description: Run a shell command
+parameters:
+  type: object
+  properties:
+    command:
+      type: string
+      description: Command to execute
+    timeout:
+      type: integer
+      description: Timeout in seconds
+      default: 30
+  required: [command]
+---
+
+import subprocess
+
+def main(command: str, timeout: int = 30) -> dict:
+    try:
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=timeout)
+        output = result.stdout[:2000] + ("\n" + result.stderr[:500] if result.stderr else "")
+        return {"success": True, "result": output or "Done (no output)"}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Command timed out"}
+    except Exception as e:
+        return {"success": False, "error": f"System error: {e}"}

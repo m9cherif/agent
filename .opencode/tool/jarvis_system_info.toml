@@ -1,0 +1,40 @@
+---
+tool: jarvis_system_info
+description: Get system information (CPU, RAM, disk, processes)
+parameters:
+  type: object
+  properties: {}
+  required: []
+---
+
+import sys
+import subprocess
+import datetime
+
+def main() -> dict:
+    try:
+        import psutil
+        cpu = psutil.cpu_percent(interval=0.5)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage("/")
+        boot = datetime.datetime.fromtimestamp(psutil.boot_time())
+        
+        info = (
+            f"CPU: {cpu}% ({psutil.cpu_count()} cores)\n"
+            f"RAM: {mem.used/1024**3:.1f} / {mem.total/1024**3:.1f} GB ({mem.percent}%)\n"
+            f"Disk: {disk.used/1024**3:.1f} / {disk.total/1024**3:.1f} GB ({disk.percent}%)\n"
+            f"Boot: {boot.strftime('%Y-%m-%d %H:%M')}\n"
+            f"Processes: {len(psutil.pids())}"
+        )
+        return {"success": True, "result": info}
+    except ImportError:
+        import platform
+        uname = platform.uname()
+        info = (
+            f"OS: {uname.system} {uname.release}\n"
+            f"Node: {uname.node}\n"
+            f"Arch: {uname.machine}"
+        )
+        return {"success": True, "result": info}
+    except Exception as e:
+        return {"success": False, "error": f"Error: {e}"}

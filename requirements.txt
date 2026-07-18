@@ -1,0 +1,30 @@
+# Core dependencies (already installed)
+requests
+sounddevice
+speechrecognition
+pyttsx3
+psutil
+pywin32
+pyperclip
+pyautogui
+
+# Optional tool dependencies
+# Audio control
+pycaw
+comtypes
+
+# QR codes
+qrcode[pil]
+pyzbar
+
+# OCR
+pytesseract
+
+# JSON path queries
+jsonpath-ng
+
+# Email (built-in smtplib/imaplib)
+# Calendar/Reminders (built-in)
+
+# Network speed test (optional)
+# speedtest-cli

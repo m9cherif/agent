@@ -1,0 +1,54 @@
+---
+tool: jarvis_notes
+description: Manage notes (save, read, list, delete)
+parameters:
+  type: object
+  properties:
+    action:
+      type: string
+      enum: [save, read, list, delete]
+      description: Action to perform
+    title:
+      type: string
+      description: Note title
+    content:
+      type: string
+      description: Note content (for save)
+  required: [action]
+---
+
+import os
+
+NOTES_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "JarvisAssistant", "notes")
+os.makedirs(NOTES_DIR, exist_ok=True)
+
+def main(action: str, title: str = "note", content: str = "") -> dict:
+    try:
+        path = os.path.join(NOTES_DIR, f"{title}.txt")
+        
+        if action == "save":
+            if not content:
+                return {"success": False, "error": "Content required"}
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return {"success": True, "result": f"Note saved: {title}"}
+        
+        elif action == "read":
+            if not os.path.exists(path):
+                return {"success": False, "error": f"Note '{title}' not found"}
+            with open(path, "r", encoding="utf-8") as f:
+                return {"success": True, "result": f.read()[:3000]}
+        
+        elif action == "list":
+            notes = [f.replace(".txt", "") for f in os.listdir(NOTES_DIR) if f.endswith(".txt")]
+            return {"success": True, "result": f"Notes ({len(notes)}): {', '.join(notes) or 'None'}"}
+        
+        elif action == "delete":
+            if os.path.exists(path):
+                os.remove(path)
+                return {"success": True, "result": f"Deleted note: {title}"}
+            return {"success": False, "error": f"Note not found: {title}"}
+        
+        return {"success": False, "error": "Actions: save, read, list, delete"}
+    except Exception as e:
+        return {"success": False, "error": f"Notes error: {e}"}

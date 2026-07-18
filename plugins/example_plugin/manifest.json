@@ -1,0 +1,23 @@
+{
+    "name": "example_skill",
+    "version": "1.0.0",
+    "description": "Example JARVIS skill plugin",
+    "author": "JARVIS Team",
+    "entry_point": "plugin.py",
+    "type": "python",
+    "api_version": "1.0",
+    "permissions": ["web_search", "file_read"],
+    "tools": [
+        {
+            "name": "hello_world",
+            "description": "Returns a greeting message",
+            "params": {
+                "name": {
+                    "type": "string",
+                    "description": "Name to greet",
+                    "required": false
+                }
+            }
+        }
+    ]
+}
