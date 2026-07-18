@@ -23,14 +23,15 @@ chmod +x requirements.sh && ./requirements.sh
 ```
 
 ```bash
-# 1. Get your free API key at https://openrouter.ai/keys
-# 2. Configure it:
-copy .env.example .env
-# Edit .env — set OPENROUTER_API_KEY=sk-or-v1-your-key-here
+# 1. Install deps
+requirements.bat        # Windows
+chmod +x requirements.sh && ./requirements.sh  # Kali Linux
 
-# 3. Launch
+# 2. Launch (API key built-in, works immediately)
 python -m jarvis_app.main
 ```
+
+> To use your **own** API key instead of the built-in one, edit `.env` and set your `OPENROUTER_API_KEY`. Get a free key at [openrouter.ai/keys](https://openrouter.ai/keys).
 
 ## Environment Variables
 

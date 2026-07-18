@@ -20,8 +20,7 @@ echo.
 echo ========================================
 echo  Installation complete!
 echo.
-echo  Next: copy .env.example to .env
-echo  Edit .env and set your OPENROUTER_API_KEY
-echo  Then run: python -m jarvis_app.main
+echo  Run: python -m jarvis_app.main
+echo  (API key built-in — edit .env to use your own)
 echo ========================================
 pause
