@@ -23,11 +23,12 @@ chmod +x requirements.sh && ./requirements.sh
 ```
 
 ```bash
-# Configure API key
+# 1. Get your free API key at https://openrouter.ai/keys
+# 2. Configure it:
 copy .env.example .env
-# Edit .env — set OPENROUTER_API_KEY
+# Edit .env — set OPENROUTER_API_KEY=sk-or-v1-your-key-here
 
-# Launch
+# 3. Launch
 python -m jarvis_app.main
 ```
 

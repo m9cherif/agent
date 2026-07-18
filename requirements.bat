@@ -9,27 +9,19 @@ echo.
 python -m pip install --upgrade pip
 
 :: Core dependencies
-echo [1/4] Installing core packages...
-pip install requests urllib3 numpy sounddevice SpeechRecognition pyttsx3 pywin32 psutil PyAutoGUI pyperclip Pillow mss
+echo [1/2] Installing core packages...
+pip install requests urllib3 edge-tts pyttsx3 comtypes
 
-:: Optional: Audio control
-echo [2/4] Installing audio control...
-pip install pycaw comtypes
-
-:: Optional: QR codes
-echo [3/4] Installing QR/barcode support...
-pip install "qrcode[pil]" pyzbar
-
-:: Optional: OCR, JSON path
-echo [4/4] Installing extras...
-pip install pytesseract jsonpath-ng edge-tts
-
-:: Optional: Windows notifications
-pip install win10toast
+:: Optional: Wake word listener
+echo [2/2] Installing wake word support...
+pip install numpy sounddevice SpeechRecognition
 
 echo.
 echo ========================================
 echo  Installation complete!
-echo  You can now run: python -m jarvis_app.main
+echo.
+echo  Next: copy .env.example to .env
+echo  Edit .env and set your OPENROUTER_API_KEY
+echo  Then run: python -m jarvis_app.main
 echo ========================================
 pause

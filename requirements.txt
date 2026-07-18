@@ -1,23 +1,11 @@
-# Core
+# Required
 requests
 urllib3
+edge-tts
+pyttsx3
+comtypes
+
+# Wake word listener (optional)
 numpy
 sounddevice
 SpeechRecognition
-pyttsx3
-psutil
-pywin32
-pyperclip
-PyAutoGUI
-Pillow
-mss
-
-# Optional
-pycaw
-comtypes
-qrcode[pil]
-pyzbar
-pytesseract
-jsonpath-ng
-edge-tts
-win10toast
