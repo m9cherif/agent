@@ -28,6 +28,7 @@ python3 -m pip install --quiet \
     urllib3 \
     edge-tts \
     pyttsx3 \
+    ddgs \
     numpy \
     sounddevice \
     SpeechRecognition

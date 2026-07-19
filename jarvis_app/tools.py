@@ -63,28 +63,19 @@ class WebSearchTool(BaseTool):
         if not query:
             return {"success": False, "result": "No query provided"}
         try:
-            url = "https://api.duckduckgo.com/?" + urllib.parse.urlencode({
-                "q": query, "format": "json", "no_html": "1", "skip_disambig": "1"
-            })
-            req = urllib.request.Request(url, headers={"User-Agent": "JarvisAssistant/2.0"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read())
-                abstract = data.get("Abstract", "") or data.get("AbstractText", "")
-                source = data.get("AbstractSource", "")
-                heading = data.get("Heading", "")
-                if not abstract:
-                    topics = data.get("RelatedTopics", [])
-                    if topics:
-                        first = topics[0]
-                        if isinstance(first, dict):
-                            text = first.get("Text", first.get("Result", ""))
-                            abstract = re.sub(r'<[^>]+>', '', text)
-                result = abstract or "No results found"
-                if heading:
-                    result = f"**{heading}**\n{result}"
-                if source:
-                    result += f"\n*Source: {source}*"
-                return {"success": True, "result": result}
+            from ddgs import DDGS
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=6))
+            if not results:
+                return {"success": True, "result": "No results found"}
+            lines = []
+            for r in results:
+                title = r.get("title", "")
+                href = r.get("href", "")
+                body = r.get("body", "")
+                if title and href:
+                    lines.append(f"• [{title}]({href})\n  {body[:150]}")
+            return {"success": True, "result": f"Results for '{query}':\n" + "\n".join(lines)}
         except Exception as e:
             return {"success": False, "result": f"Search error: {e}"}
 
@@ -673,22 +664,26 @@ class NewsTool(BaseTool):
     def execute(self, params):
         topic = params.get("topic", params.get("query", ""))
         try:
+            import xml.etree.ElementTree as ET
             if topic:
-                url = f"https://newsapi.org/v2/everything?q={urllib.parse.quote(topic)}&pageSize=8&apiKey=94c8b3f8c2e0464f983a25c7ce749e0e"
+                url = f"https://news.google.com/rss/search?q={urllib.parse.quote(topic)}&hl=en-US&gl=US&ceid=US:en"
             else:
-                url = f"https://newsapi.org/v2/top-headlines?country=us&pageSize=8&apiKey=94c8b3f8c2e0464f983a25c7ce749e0e"
-            req = urllib.request.Request(url, headers={"User-Agent": "Jarvis/2.0"})
+                url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
             with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read())
-            articles = data.get("articles", [])
-            if not articles:
+                tree = ET.parse(resp)
+            root = tree.getroot()
+            items = root.findall(".//item")[:8]
+            if not items:
                 return {"success": False, "result": "No news found. Try a different topic."}
             lines = []
-            for a in articles[:8]:
-                title = a.get("title", "")
-                source = a.get("source", {}).get("name", "")
-                if title:
+            for item in items:
+                title = item.findtext("title", "")
+                source = item.findtext("source", "")
+                if source:
                     lines.append(f"• [{source}] {title[:150]}")
+                else:
+                    lines.append(f"• {title[:150]}")
             return {"success": True, "result": (f"News about '{topic}':\n" if topic else "Top headlines:\n") + "\n".join(lines)}
         except Exception as e:
             return {"success": False, "result": f"News error: {e}"}

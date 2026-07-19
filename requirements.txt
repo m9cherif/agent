@@ -4,6 +4,7 @@ urllib3
 edge-tts
 pyttsx3
 comtypes
+ddgs
 
 # Wake word listener (optional)
 numpy

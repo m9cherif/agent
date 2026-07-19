@@ -18,7 +18,7 @@ def main():
 
     # Install core deps
     print("\n[2] Installing core packages...")
-    run(pip + ["install", "requests", "urllib3", "edge-tts", "pyttsx3", "numpy", "sounddevice", "SpeechRecognition"])
+    run(pip + ["install", "requests", "urllib3", "edge-tts", "pyttsx3", "ddgs", "numpy", "sounddevice", "SpeechRecognition"])
 
     if sys.platform == "win32":
         # Windows-only deps
