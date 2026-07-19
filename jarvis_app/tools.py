@@ -3102,6 +3102,300 @@ class RDJokeTool(BaseTool):
                 return {"success": False, "result": f"Joke error: {e}"}
 
 
+class ShowTool(BaseTool):
+    """Display text in a scrollable popup window"""
+    def execute(self, params):
+        text = params.get("text", params.get("content", ""))
+        title = params.get("title", "JARVIS Viewer")
+        if not text:
+            return {"success": False, "result": "Text required"}
+        try:
+            import tkinter as tk
+            from tkinter import scrolledtext
+            top = tk.Toplevel()
+            top.title(title)
+            top.geometry("600x400")
+            top.configure(bg="#060618")
+            txt = scrolledtext.ScrolledText(top, wrap=tk.WORD, bg="#0a0a2e", fg="#c8e6ff",
+                                            insertbackground="#00ddff", font=("Consolas", 10))
+            txt.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            txt.insert("1.0", text)
+            txt.config(state=tk.DISABLED)
+            return {"success": True, "result": f"Opened window: {title}"}
+        except Exception as e:
+            return {"success": True, "result": text[:2000]}
+
+
+class AlertTool(BaseTool):
+    """Show notification alert with custom title/message/icon"""
+    def execute(self, params):
+        title = params.get("title", "JARVIS")
+        message = params.get("message", params.get("text", ""))
+        icon = params.get("icon", "info")
+        try:
+            icons = {"info": 0x40, "warn": 0x30, "error": 0x10, "question": 0x20}
+            flags = icons.get(icon, 0x40) | 0x1000
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, message, title, flags)
+            return {"success": True, "result": f"Alert shown: {title}"}
+        except Exception:
+            try:
+                from win10toast import ToastNotifier
+                ToastNotifier().show_toast(title, message, duration=5, threaded=True)
+                return {"success": True, "result": f"Notification: {title}"}
+            except Exception:
+                return {"success": True, "result": f"[{icon.upper()}] {title}: {message[:200]}"}
+
+
+class CsvTool(BaseTool):
+    """Format CSV data as aligned table"""
+    def execute(self, params):
+        data = params.get("data", "")
+        if not data:
+            return {"success": False, "result": "CSV data required"}
+        try:
+            import csv, io
+            reader = csv.reader(io.StringIO(data))
+            rows = [row for row in reader if any(c.strip() for c in row)]
+            if not rows:
+                return {"success": False, "result": "Empty CSV"}
+            col_widths = [max(len(cell) for cell in col) for col in zip(*rows)]
+            lines = []
+            for i, row in enumerate(rows):
+                padded = [cell.ljust(col_widths[j]) for j, cell in enumerate(row)]
+                lines.append(" | ".join(padded))
+                if i == 0:
+                    lines.append("-|-".join("-" * w for w in col_widths))
+            return {"success": True, "result": "\n".join(lines)}
+        except Exception as e:
+            return {"success": False, "result": f"CSV error: {e}"}
+
+
+class JsonFormatTool(BaseTool):
+    """Format, validate, or query JSON data"""
+    def execute(self, params):
+        action = params.get("action", "format")
+        data = params.get("data", "")
+        if not data:
+            return {"success": False, "result": "JSON data required"}
+        try:
+            parsed = json.loads(data)
+            if action == "format":
+                return {"success": True, "result": json.dumps(parsed, indent=2, ensure_ascii=False)[:5000]}
+            elif action == "validate":
+                return {"success": True, "result": "Valid JSON"}
+            elif action == "minify":
+                return {"success": True, "result": json.dumps(parsed, separators=(",", ":"), ensure_ascii=False)}
+            elif action == "query":
+                import jsonpath_ng
+                path = params.get("path", "$")
+                expr = jsonpath_ng.parse(path)
+                matches = [m.value for m in expr.find(parsed)]
+                return {"success": True, "result": json.dumps(matches, indent=2, ensure_ascii=False)[:3000]}
+            return {"success": False, "result": "Actions: format, validate, minify, query"}
+        except json.JSONDecodeError as e:
+            return {"success": False, "result": f"Invalid JSON: {e}"}
+        except Exception as e:
+            return {"success": False, "result": f"JSON error: {e}"}
+
+
+class BrightnessTool(BaseTool):
+    """Get/set screen brightness"""
+    def execute(self, params):
+        action = params.get("action", "get")
+        import subprocess
+        try:
+            if action == "get":
+                r = subprocess.run(["powershell", "-c", "(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness).CurrentBrightness"],
+                                   capture_output=True, text=True, timeout=5)
+                val = r.stdout.strip()
+                return {"success": True, "result": f"Brightness: {val}%" if val else "N/A"}
+            elif action == "set":
+                pct = max(0, min(100, int(params.get("percent", params.get("value", 50)))))
+                subprocess.run(["powershell", "-c", f"(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1,{pct})"],
+                               capture_output=True, text=True, timeout=5)
+                return {"success": True, "result": f"Brightness set to {pct}%"}
+            return {"success": False, "result": "Actions: get, set"}
+        except Exception as e:
+            return {"success": False, "result": f"Brightness error: {e}"}
+
+
+class EncodeTool(BaseTool):
+    """Encode/decode various formats"""
+    def execute(self, params):
+        action = params.get("action", "rot13")
+        text = params.get("text", "")
+        if not text:
+            return {"success": False, "result": "Text required"}
+        try:
+            if action == "rot13":
+                return {"success": True, "result": text.translate(str.maketrans(
+                    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+                    "NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm"))}
+            elif action == "binary":
+                return {"success": True, "result": " ".join(format(ord(c), "08b") for c in text)}
+            elif action == "hex":
+                return {"success": True, "result": text.encode().hex()}
+            elif action == "octal":
+                return {"success": True, "result": " ".join(format(ord(c), "03o") for c in text)}
+            elif action == "morse":
+                morse = {"A":".-","B":"-...","C":"-.-.","D":"-..","E":".","F":"..-.","G":"--.","H":"....","I":"..","J":".---",
+                         "K":"-.-","L":".-..","M":"--","N":"-.","O":"---","P":".--.","Q":"--.-","R":".-.","S":"...","T":"-",
+                         "U":"..-","V":"...-","W":".--","X":"-..-","Y":"-.--","Z":"--..","0":"-----","1":".----","2":"..---",
+                         "3":"...--","4":"....-","5":".....","6":"-....","7":"--...","8":"---..","9":"----."}
+                encoded = " ".join(morse.get(c.upper(), c) for c in text)
+                return {"success": True, "result": encoded[:2000]}
+            return {"success": False, "result": "Actions: rot13, binary, hex, octal, morse"}
+        except Exception as e:
+            return {"success": False, "result": f"Encode error: {e}"}
+
+
+class ChartTool(BaseTool):
+    """Generate ASCII bar chart from numbers"""
+    def execute(self, params):
+        data = params.get("data", "")
+        if isinstance(data, str):
+            try:
+                entries = json.loads(data)
+            except Exception:
+                pairs = [p.split(":") for p in data.split(",") if ":" in p]
+                entries = {k.strip(): float(v.strip()) for k, v in pairs}
+        else:
+            entries = data if isinstance(data, dict) else {}
+        if not entries:
+            return {"success": False, "result": "Data required (e.g. {'A':10,'B':20})"}
+        max_val = max(entries.values()) or 1
+        bar_width = 30
+        lines = []
+        for label, val in sorted(entries.items(), key=lambda x: -x[1]):
+            bar_len = max(1, int((val / max_val) * bar_width))
+            bar = "█" * bar_len
+            lines.append(f"{str(label)[:10]:>10} | {bar} {val}")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class MarkdownRenderTool(BaseTool):
+    """Strip markdown formatting to clean text"""
+    def execute(self, params):
+        text = params.get("text", "")
+        if not text:
+            return {"success": False, "result": "Text required"}
+        try:
+            text = re.sub(r'#{1,6}\s+', '', text)
+            text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+            text = re.sub(r'\*([^*]+)\*', r'\1', text)
+            text = re.sub(r'`([^`]+)`', r'\1', text)
+            text = re.sub(r'```.*?\n', '\n', text, flags=re.DOTALL)
+            text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+            text = re.sub(r'>\s+', '', text)
+            text = re.sub(r'[-*+]\s+', '', text)
+            text = re.sub(r'\d+\.\s+', '', text)
+            text = re.sub(r'\|', '', text)
+            text = re.sub(r'\n{3,}', '\n\n', text)
+            return {"success": True, "result": text.strip()[:3000]}
+        except Exception as e:
+            return {"success": False, "result": f"Render error: {e}"}
+
+
+class ScreenResTool(BaseTool):
+    """Get screen resolution and info"""
+    def execute(self, params):
+        try:
+            import tkinter as tk
+            root = tk.Tk()
+            w = root.winfo_screenwidth()
+            h = root.winfo_screenheight()
+            root.destroy()
+            return {"success": True, "result": f"Screen: {w}x{h}"}
+        except Exception:
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                return {"success": True, "result": f"Screen: {user32.GetSystemMetrics(0)}x{user32.GetSystemMetrics(1)}"}
+            except Exception:
+                return {"success": False, "result": "Screen info unavailable"}
+
+
+class CounterTool(BaseTool):
+    """Simple increment/decrement/reset counter"""
+    def __init__(self):
+        self._counters = {}
+
+    def execute(self, params):
+        name = params.get("name", "default")
+        action = params.get("action", "get")
+        if name not in self._counters:
+            self._counters[name] = 0
+        try:
+            if action == "get":
+                return {"success": True, "result": f"Counter '{name}': {self._counters[name]}"}
+            elif action == "inc":
+                self._counters[name] += 1
+                return {"success": True, "result": f"Counter '{name}': {self._counters[name]}"}
+            elif action == "dec":
+                self._counters[name] -= 1
+                return {"success": True, "result": f"Counter '{name}': {self._counters[name]}"}
+            elif action == "add":
+                self._counters[name] += int(params.get("value", params.get("amount", 1)))
+                return {"success": True, "result": f"Counter '{name}': {self._counters[name]}"}
+            elif action == "reset":
+                self._counters[name] = 0
+                return {"success": True, "result": f"Counter '{name}' reset"}
+            elif action == "list":
+                if not self._counters:
+                    return {"success": True, "result": "No counters"}
+                return {"success": True, "result": "\n".join(f"{k}: {v}" for k, v in sorted(self._counters.items()))}
+            return {"success": False, "result": "Actions: get, inc, dec, add, reset, list"}
+        except Exception as e:
+            return {"success": False, "result": f"Counter error: {e}"}
+
+
+class ProgressTool(BaseTool):
+    """Show a simple text progress bar"""
+    def execute(self, params):
+        current = int(params.get("current", params.get("value", 0)))
+        total = int(params.get("total", params.get("max", 100)))
+        width = int(params.get("width", params.get("size", 30)))
+        label = params.get("label", "")
+        if total <= 0:
+            total = 100
+        pct = min(100, max(0, (current / total) * 100))
+        filled = int((current / total) * width)
+        bar = "█" * filled + "░" * (width - filled)
+        result = f"{label + ': ' if label else ''}[{bar}] {pct:.0f}% ({current}/{total})"
+        return {"success": True, "result": result}
+
+
+class ColorPickerTool(BaseTool):
+    """Show a color picker dialog or convert between color formats"""
+    def execute(self, params):
+        action = params.get("action", "pick")
+        try:
+            if action == "pick":
+                import tkinter as tk
+                from tkinter import colorchooser
+                root = tk.Tk()
+                root.withdraw()
+                color = colorchooser.askcolor(title="Pick a color", initialcolor="#00ddff")
+                root.destroy()
+                if color and color[0]:
+                    r, g, b = [int(c) for c in color[0]]
+                    return {"success": True, "result": f"RGB({r},{g},{b})  Hex: #{r:02x}{g:02x}{b:02x}"}
+                return {"success": True, "result": "No color selected"}
+            elif action == "rgb_to_hex":
+                r, g, b = int(params.get("r", 0)), int(params.get("g", 0)), int(params.get("b", 0))
+                return {"success": True, "result": f"#{r:02x}{g:02x}{b:02x}"}
+            elif action == "hex_to_rgb":
+                h = params.get("hex", "#000").lstrip("#")
+                if len(h) == 3:
+                    h = "".join(c*2 for c in h)
+                r, g, b = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+                return {"success": True, "result": f"rgb({r},{g},{b})"}
+            return {"success": False, "result": "Actions: pick, rgb_to_hex, hex_to_rgb"}
+        except Exception as e:
+            return {"success": False, "result": f"Color pick error: {e}"}
+
+
 def create_default_registry():
     registry = ToolRegistry()
     registry.register("web_search", WebSearchTool())
@@ -3201,4 +3495,17 @@ def create_default_registry():
     registry.register("movie", MovieTool())
     registry.register("recipe", RecipeTool())
     registry.register("random_joke", RDJokeTool())
+    # Display/UI tools
+    registry.register("show", ShowTool())
+    registry.register("alert", AlertTool())
+    registry.register("csv_view", CsvTool())
+    registry.register("json_format", JsonFormatTool())
+    registry.register("brightness", BrightnessTool())
+    registry.register("encode", EncodeTool())
+    registry.register("chart", ChartTool())
+    registry.register("markdown_render", MarkdownRenderTool())
+    registry.register("screen_res", ScreenResTool())
+    registry.register("counter", CounterTool())
+    registry.register("progress", ProgressTool())
+    registry.register("color_picker", ColorPickerTool())
     return registry
