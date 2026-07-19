@@ -85,8 +85,8 @@ class JarvisApp:
             _tool_response = False
             g.after_safe(lambda: g._set_status("◆ READY"))
             g.after_safe(lambda: g.play_sound("done"))
-            g.after_safe(lambda: g.set_viz_state("idle"))
             if is_tool:
+                g.after_safe(lambda: g.set_viz_state("idle"))
                 g.after_safe(lambda: g.clear_response())
                 return
             self.voice.speak(response)

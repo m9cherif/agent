@@ -200,6 +200,8 @@ class WaveformVisualizer:
         self.satellites = []
         self.phase = 0.0
         self.state = "idle"
+        self._voice_rings = []
+        self._prev_amp = 0.0
         self._init_ambient()
         self._init_satellites()
 
@@ -231,12 +233,18 @@ class WaveformVisualizer:
         self.buffer.pop(0)
         self.buffer.append(min(amp / 2000.0, 1.0))
 
+    def _voice_level(self):
+        if not self.buffer:
+            return 0.0
+        return sum(self.buffer[-8:]) / min(len(self.buffer), 8)
+
     def _color(self):
         return self.STATE_COLORS.get(self.state, "#00ddff")
 
     def draw(self):
         self.canvas.delete("all")
         self.phase += 0.05
+        self._update_voice_rings()
         self._draw_background()
         self._draw_data_stream()
         self._draw_ambient_particles()
@@ -257,6 +265,7 @@ class WaveformVisualizer:
             self._draw_idle()
 
         self._draw_satellites()
+        self._draw_voice_rings()
         self._draw_center_eye()
         self._draw_corner_brackets()
         self._draw_data_readouts()
@@ -481,106 +490,152 @@ class WaveformVisualizer:
                 alive.append(p)
         self.particles = alive
 
+    def _update_voice_rings(self):
+        amp = self._voice_level()
+        peak = amp > 0.15 and self._prev_amp <= 0.15
+        self._prev_amp = amp
+        if peak:
+            self._voice_rings.append({
+                "r": 3,
+                "max_r": 15 + amp * 30,
+                "alpha": 0.8,
+                "speed": 0.6 + amp * 1.5,
+            })
+        alive = []
+        for vr in self._voice_rings:
+            vr["r"] += vr["speed"]
+            vr["alpha"] *= 0.92
+            if vr["alpha"] > 0.02 and vr["r"] < vr["max_r"]:
+                alive.append(vr)
+        self._voice_rings = alive
+
+    def _draw_voice_rings(self):
+        cx, cy = self.cx, self.cy
+        col = self._color()
+        for vr in self._voice_rings:
+            a = int(vr["alpha"] * 255)
+            c = f"#{a:02x}{a:02x}ff" if col == "#dd44ff" else f"#00{a:02x}ff"
+            self.canvas.create_oval(
+                cx - vr["r"], cy - vr["r"], cx + vr["r"], cy + vr["r"],
+                outline=c, width=1
+            )
+
     def _draw_satellites(self):
         cx, cy = self.cx, self.cy
         r = min(self.w, self.h) * 0.28
         col = self._color()
+        amp = self._voice_level()
         for s in self.satellites:
+            pulse = 1.0 + amp * 0.8
             s["radius"] = r + 8 * math.sin(self.phase * 1.5 + s["angle_offset"])
             angle = self.phase * s["speed"] + s["angle_offset"]
             x = cx + s["radius"] * math.cos(angle)
             y = cy + s["radius"] * math.sin(angle)
+            trail_len = max(3, int(5 + amp * 12))
             trail = [(cx + s["radius"] * math.cos(angle - t * 0.05),
-                      cy + s["radius"] * math.sin(angle - t * 0.05)) for t in range(5)]
+                      cy + s["radius"] * math.sin(angle - t * 0.05)) for t in range(trail_len)]
             for ti, (tx, ty) in enumerate(trail):
-                a = int(60 * (1 - ti / 5))
+                a = int(60 * (1 - ti / trail_len) * (0.5 + 0.5 * amp))
                 self.canvas.create_oval(tx - 1, ty - 1, tx + 1, ty + 1,
                                         fill=f"#00{a:02x}ff", outline="")
-            self.canvas.create_oval(x - s["size"], y - s["size"], x + s["size"], y + s["size"],
+            sz = s["size"] * pulse
+            self.canvas.create_oval(x - sz, y - sz, x + sz, y + sz,
                                     fill=col, outline="#4488aa")
 
     def _draw_center_eye(self):
         cx, cy = self.cx, self.cy
         col = self._color()
         t = self.phase
+        amp = self._voice_level()
 
         # --- Outer rotating ring with tick marks ---
-        outer_r = 24 + 3 * math.sin(t * 1.5)
+        outer_r = 24 + 3 * math.sin(t * 1.5) + amp * 6
         self.canvas.create_oval(cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r,
                                 outline=f"#004466", width=1)
+        tick_pulse = int(80 + 100 * amp)
         for i in range(24):
             a = (i / 24) * 2 * math.pi + t * 0.6
             is_major = i % 6 == 0
             ir = outer_r - (5 if is_major else 3)
             ox = cx + ir * math.cos(a); oy = cy + ir * math.sin(a)
             ix = cx + (outer_r - (2 if is_major else 1)) * math.cos(a); iy = cy + (outer_r - (2 if is_major else 1)) * math.sin(a)
-            a_v = int(180 if is_major else 80)
+            a_v = int(max(80, tick_pulse) if is_major else 80)
             self.canvas.create_line(ox, oy, ix, iy, fill=f"#00{a_v:02x}ff", width=2 if is_major else 1)
 
-        # --- Middle rotating hexagon ---
-        hex_r = 14 + 2 * math.sin(t * 1.7)
+        # --- Middle rotating hexagon (faster with voice) ---
+        speed_boost = 1.0 + amp * 2.0
+        hex_r = 14 + 2 * math.sin(t * 1.7) + amp * 4
         hex_pts = []
         for i in range(6):
-            a = (i / 6) * 2 * math.pi - math.pi / 6 + t * 0.35
-            rr = hex_r + 3 * math.sin(t * 2.3 + i * 1.05)
+            a = (i / 6) * 2 * math.pi - math.pi / 6 + t * 0.35 * speed_boost
+            rr = hex_r + 3 * math.sin(t * 2.3 + i * 1.05) + amp * 2
             hex_pts.extend([cx + rr * math.cos(a), cy + rr * math.sin(a)])
         self.canvas.create_polygon(*hex_pts, fill="#001a33", outline=col, width=2)
-        # Inner hex ring (counter-rotating)
-        inner_hex_r = 9 + 1.5 * math.sin(t * 2.1)
+        # Inner hex ring (counter-rotating, faster with voice)
+        inner_hex_r = 9 + 1.5 * math.sin(t * 2.1) + amp * 3
         inner_hex_pts = []
         for i in range(6):
-            a = (i / 6) * 2 * math.pi + math.pi / 6 - t * 0.25
-            rr = inner_hex_r + 2 * math.sin(t * 1.9 + i * 1.05)
+            a = (i / 6) * 2 * math.pi + math.pi / 6 - t * 0.25 * speed_boost
+            rr = inner_hex_r + 2 * math.sin(t * 1.9 + i * 1.05) + amp * 2
             inner_hex_pts.extend([cx + rr * math.cos(a), cy + rr * math.sin(a)])
         self.canvas.create_polygon(*inner_hex_pts, outline="#0088bb", width=1, fill="")
 
         # --- Rotating cross / diamond inside ---
-        cross_r = 10 + 1.5 * math.sin(t * 2.5)
+        cross_r = 10 + 1.5 * math.sin(t * 2.5) + amp * 5
         for i in range(4):
             a = (i / 4) * 2 * math.pi + t * 0.5
             x = cx + cross_r * math.cos(a); y = cy + cross_r * math.sin(a)
             self.canvas.create_line(cx, cy, x, y, fill="#0066aa", width=1)
 
-        # --- Concentric pulsing rings ---
+        # --- Concentric pulsing rings (amplitude modulates pulse depth) ---
         for ring in range(3):
-            rr_inner = inner_hex_r * (ring + 1) / 3 + 2 * math.sin(t * 2 + ring * 1.2)
-            a = max(0, int(60 - 20 * ring + 30 * math.sin(t * 1.5 + ring)))
+            ring_amp = ring + 1 + amp * 3
+            rr_inner = inner_hex_r * ring_amp / 3 + 2 * math.sin(t * 2 * (1 + amp) + ring * 1.2)
+            a = max(0, int(60 - 20 * ring + 30 * math.sin(t * 1.5 + ring)) + int(80 * amp))
             self.canvas.create_oval(cx - rr_inner, cy - rr_inner, cx + rr_inner, cy + rr_inner,
                                     outline=f"#00{a:02x}ff", width=1)
 
         # --- Scanning arc (180° sweep back and forth) ---
         scan_angle = t * 0.7
-        sweep = abs(math.sin(t * 0.5)) * math.pi  # 0..π sweep
+        sweep = abs(math.sin(t * 0.5 * (1 + amp))) * math.pi
         for s in range(15):
             a = scan_angle - sweep / 2 + (s / 15) * sweep
-            sa = int(120 * (1 - s / 15))
+            sa = int(120 * (1 - s / 15) + 80 * amp)
             sx = cx + inner_hex_r * math.cos(a)
             sy = cy + inner_hex_r * math.sin(a)
             self.canvas.create_oval(sx - 2, sy - 2, sx + 2, sy + 2,
                                     fill=f"#{sa:02x}{sa:02x}ff" if sa > 60 else f"#00{sa:02x}ff",
                                     outline="")
 
-        # --- Bright inner core ---
-        core_r = 3 + 2.5 * math.sin(t * 3)
-        alpha = int(180 + 75 * math.sin(t * 2.5))
+        # --- Bright inner core (dilates with voice) ---
+        core_r = 3 + 2.5 * math.sin(t * 3) + amp * 5
+        alpha = int(180 + 75 * math.sin(t * 2.5) + 75 * amp)
         self.canvas.create_oval(cx - core_r, cy - core_r, cx + core_r, cy + core_r,
                                 fill=col, outline="")
-        # White-hot center dot
-        dot_r = 1.2 + 0.8 * math.sin(t * 4)
+        # White-hot center dot (dilates with voice)
+        dot_r = 1.2 + 0.8 * math.sin(t * 4) + amp * 2.5
         self.canvas.create_oval(cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r,
                                 fill="white", outline="")
 
-        # --- Radial glow rays ---
+        # --- Radial glow rays (extend with voice) ---
         for i in range(8):
             a = (i / 8) * 2 * math.pi + t * 0.2
-            ray_len = 3 + 5 * math.sin(t * 1.8 + i * 0.8)
+            ray_len = 3 + 5 * math.sin(t * 1.8 + i * 0.8) + amp * 12
             rx = cx + (core_r + ray_len) * math.cos(a)
             ry = cy + (core_r + ray_len) * math.sin(a)
-            al = int(100 + 80 * math.sin(t * 2 + i))
+            al = int(100 + 80 * math.sin(t * 2 + i) + 100 * amp)
             self.canvas.create_line(
                 cx + core_r * math.cos(a), cy + core_r * math.sin(a),
                 rx, ry, fill=f"#{al:02x}{al:02x}ff", width=1
             )
+
+        # --- Amplitude glow halo ---
+        if amp > 0.05:
+            halo_r = 6 + amp * 20
+            ha = int(40 + 120 * amp)
+            self.canvas.create_oval(cx - halo_r, cy - halo_r, cx + halo_r, cy + halo_r,
+                                    fill=f"#{ha:02x}{ha:02x}ff" if self.state == "speaking" else f"#00{ha:02x}ff",
+                                    outline="")
 
     def _draw_targeting_reticle(self):
         cx, cy = self.cx, self.cy
@@ -1159,10 +1214,20 @@ class JarvisGUI:
         if w > 10 and h > 10:
             if not self.viz or self.viz.w != w or self.viz.h != h:
                 self.viz = WaveformVisualizer(self.canvas, w, h)
-            if self.voice and hasattr(self.voice, "current_amplitude"):
+
+            # Determine amplitude source and manage speaking state
+            is_tts = getattr(self.voice, '_tts_active', False) if self.voice else False
+            if is_tts:
+                if self.viz.state != "speaking":
+                    self.viz.set_state("speaking")
+                amp = getattr(self.voice, 'speaking_amplitude', 0.0)
+                self.viz.push_amplitude(amp)
+            elif self.viz.state == "speaking":
+                self.viz.set_state("idle")
+            elif self.listening and self.voice:
                 amp = getattr(self.voice, "current_amplitude", 0)
-                if self.listening:
-                    self.viz.push_amplitude(amp)
+                self.viz.push_amplitude(amp)
+
             self.viz.draw()
         self.root.after(33, self._anim_loop)
 

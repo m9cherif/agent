@@ -1,8 +1,10 @@
 """JARVIS Voice Pipeline - Real-time STT + edge-tts (JARVIS voice) + SAPI fallback"""
 
 import io
+import math
 import os
 import queue
+import random
 import re
 import tempfile
 import threading
@@ -39,6 +41,8 @@ class VoiceEngine:
         self._stream_lock = threading.Lock()
         self._speaking = threading.Event()
         self.current_amplitude = 0.0
+        self.speaking_amplitude = 0.0
+        self._tts_active = False
         self._device = 14
         self._edge_voice = "en-GB-RyanNeural"
         self._speaker = None
@@ -118,6 +122,9 @@ class VoiceEngine:
         cleaned = self._clean_for_speech(text)
         if not cleaned:
             return
+        self._tts_active = True
+        threading.Thread(target=self._simulate_speech_amplitude,
+                         args=(len(cleaned),), daemon=True).start()
         # Try edge-tts first for JARVIS British male voice
         if self._edge_available:
             t = threading.Thread(target=self._edge_speak, args=(cleaned,), daemon=True)
@@ -158,6 +165,8 @@ class VoiceEngine:
             self.speak(full)
 
     def stop_speech(self):
+        self._tts_active = False
+        self.speaking_amplitude = 0.0
         with self._stream_lock:
             self._stream_buffer = ""
         try:
@@ -247,6 +256,25 @@ class VoiceEngine:
             self._tts_fallback.runAndWait()
         except Exception as e:
             self._emit("tts_error", str(e))
+
+    def _simulate_speech_amplitude(self, char_count):
+        duration = max(char_count / 12.0, 0.5)
+        start = time.time()
+        while self._tts_active and time.time() - start < duration + 2:
+            elapsed = time.time() - start
+            if elapsed > duration:
+                self.speaking_amplitude *= 0.92
+                if self.speaking_amplitude < 1:
+                    break
+                time.sleep(0.03)
+                continue
+            syllable = 0.5 + 0.5 * math.sin(elapsed * 10 * math.pi + math.sin(elapsed * 3) * 2)
+            micro = 0.7 + 0.3 * random.random()
+            env = min(elapsed / 0.1, 1.0) * max(0, 1 - elapsed / duration)
+            self.speaking_amplitude = max(50, syllable * micro * env * 800)
+            time.sleep(0.03)
+        self._tts_active = False
+        self.speaking_amplitude = 0.0
 
     def _rms(self, frame):
         import numpy as np
