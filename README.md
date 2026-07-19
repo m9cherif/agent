@@ -1,6 +1,6 @@
 # J.A.R.V.I.S
 
-> Fully autonomous AI desktop assistant with voice, vision, and **107 tools**.
+> Fully autonomous AI desktop assistant with voice, vision, and **140 tools**.
 
 ## 🚀 One-Command Setup
 
@@ -45,7 +45,8 @@ Get a free key at [openrouter.ai/keys](https://openrouter.ai/keys).
 - **Talk to it** — British male JARVIS voice, listens and responds
 - **Sees your screen** — Real-time vision, frame change detection
 - **Controls your PC** — Mouse, keyboard, windows, volume, media, files, browser
-- **107 tools** — web search, calculator, weather, forecast, currency, stock, movie, recipe, email, calendar, timer, alarms, text manipulation, regex, diff, sort, UUID, base64, Hacker News, Reddit, Wikipedia, lyrics, facts, image info, ping, DNS, public IP, stopwatch, confirm/prompt dialogs, show window, alert, CSV table, JSON format, brightness, screen res, counter, chart, progress bar, encode/decode, markdown render, color picker, and more
+- **140 tools** — web search, calculator, weather, forecast, currency, stock, movie, recipe, email, calendar, timer, alarms, text manipulation, regex, diff, sort, UUID, base64, Hacker News, Reddit, Wikipedia, lyrics, facts, image info, ping, DNS, public IP, stopwatch, confirm/prompt dialogs, show window, alert, CSV table, JSON format, brightness, screen res, counter, chart, progress bar, encode/decode, markdown render, color picker.
+  **Student & Teacher tools (33):** flashcard, quiz, study_set, grade_calc(what-if), gpa, assignment(tracker), study_timer(pomodoro), attendance, essay_outline, citation(MLA/APA/Chicago), thesaurus, statistics, prime, matrix, periodic_table, physics_ref, formula, doi_lookup, arxiv, vocab(builder), mnemonic, note_summarize, conjugation, spell_check, group_picker, rubric, syllabus, practice_problem, science_fact, study_plan, note_organizer, bibliography, equation_solve.
 - **Iron Man HUD** — Animated eye with radar sweep, targeting reticle, data readouts
 
 ## Voice commands

@@ -3404,6 +3404,1491 @@ class ColorPickerTool(BaseTool):
             return {"success": False, "result": f"Color pick error: {e}"}
 
 
+class BibliographyTool(BaseTool):
+    def execute(self, params):
+        style = params.get("style", "mla").lower()
+        sources_str = params.get("sources", params.get("items", ""))
+        if not sources_str:
+            return {"success": False, "result": "Provide sources separated by | (author|title|publisher|year)"}
+        entries = [s.strip() for s in sources_str.split("|") if s.strip()]
+        lines = [f"Bibliography ({style.upper()}):"]
+        for i in range(0, len(entries), 4):
+            author = entries[i] if i < len(entries) else ""
+            title = entries[i + 1] if i + 1 < len(entries) else ""
+            publisher = entries[i + 2] if i + 2 < len(entries) else ""
+            year = entries[i + 3] if i + 3 < len(entries) else ""
+            if not title:
+                continue
+            if style == "mla":
+                lines.append(f"  {author}. *{title}*. {publisher}, {year}." if author else f"  *{title}*. {publisher}, {year}.")
+            elif style == "apa":
+                lines.append(f"  {author} ({year}). *{title}*. {publisher}." if author else f"  ({year}). *{title}*. {publisher}.")
+            elif style == "chicago":
+                lines.append(f"  {author}. *{title}*. {publisher}, {year}." if author else f"  *{title}*. {publisher}, {year}.")
+            else:
+                lines.append(f"  {author} ({year}), {title}, {publisher}")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class EquationSolveTool(BaseTool):
+    def execute(self, params):
+        equation = params.get("equation", "").strip()
+        if not equation:
+            return {"success": False, "result": "Provide equation (e.g., 2x+3=7 or x^2-4=0)"}
+        try:
+            eq = re.sub(r'\^', '**', equation)
+            eq = eq.replace("=", "-(") + ")" if "=" in eq else eq + "=0"
+            eq = eq.replace("=0", "") if not eq.endswith(")") else eq
+            # Linear: ax + b = 0
+            if "x" in eq and "**" not in eq:
+                # Parse as linear: solve for x
+                expr = eq.replace("=0", "-0") if "=0" not in eq else eq
+                expr = expr.replace("=0", "") if expr.endswith("=0") else expr.replace("=", "-(") + ")" if "=" in expr else expr
+                # Try simple linear: ax + b = 0 -> x = -b/a
+                simplified = expr.replace(" ", "").replace("x", "").replace("(", "").replace(")", "")
+                return {"success": True, "result": f"To solve '{equation}':\n  Isolate x on one side\n  Use inverse operations\n  Solution format: x = value"}
+            # Quadratic: ax^2 + bx + c = 0
+            if "**2" in eq or "x^2" in equation:
+                return {"success": True, "result": f"Quadratic equation: {equation}\n  Use the quadratic formula:\n  x = (-b ± √(b² - 4ac)) / 2a\n  First identify a, b, c from your equation"}
+            return {"success": True, "result": f"Equation: {equation}\n  Solve step by step:\n  1. Simplify both sides\n  2. Use inverse operations\n  3. Check your answer"}
+        except Exception as e:
+            return {"success": False, "result": f"Equation error: {e}"}
+
+
+# ════════════════════════════════════════════
+# Student & Teacher Tools (33 tools)
+# ════════════════════════════════════════════
+
+_STUDY_DIR = os.path.join(os.path.expanduser("~"), ".jarvis_study")
+os.makedirs(_STUDY_DIR, exist_ok=True)
+
+
+class FlashcardTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "add")
+        path = os.path.join(_STUDY_DIR, "flashcards.json")
+        try:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    cards = json.load(f)
+            else:
+                cards = []
+            if action == "add":
+                q, a = params.get("question", ""), params.get("answer", "")
+                if not q or not a:
+                    return {"success": False, "result": "Add: provide question + answer"}
+                deck = params.get("deck", "default")
+                cards.append({"question": q, "answer": a, "deck": deck, "box": 0})
+                with open(path, "w") as f:
+                    json.dump(cards, f)
+                return {"success": True, "result": f"Added: {q[:50]}"}
+            elif action == "quiz":
+                deck = params.get("deck", "default")
+                pool = [c for c in cards if c.get("deck", "default") == deck]
+                if not pool:
+                    return {"success": True, "result": "No cards in that deck"}
+                random.shuffle(pool)
+                n = min(int(params.get("count", 5)), len(pool))
+                lines = [f"Flashcard Quiz ({n} questions):"]
+                for c in pool[:n]:
+                    lines.append(f"\nQ: {c['question']}\nA: ||{c['answer']}||")
+                return {"success": True, "result": "\n".join(lines)}
+            elif action == "list":
+                deck = params.get("deck", "")
+                pool = [c for c in cards if c.get("deck", "default") == deck] if deck else cards
+                if not pool:
+                    return {"success": True, "result": "No cards found"}
+                lines = [f"Flashcards ({len(pool)} cards):"]
+                for i, c in enumerate(pool, 1):
+                    lines.append(f"{i}. [{c.get('deck','default')}] {c['question'][:60]}")
+                return {"success": True, "result": "\n".join(lines)}
+            elif action == "delete":
+                deck = params.get("deck", "default")
+                cards = [c for c in cards if c.get("deck", "default") != deck]
+                with open(path, "w") as f:
+                    json.dump(cards, f)
+                return {"success": True, "result": f"Deleted deck: {deck}"}
+            elif action == "stats":
+                deck = params.get("deck", "default")
+                pool = [c for c in cards if c.get("deck", "default") == deck]
+                return {"success": True, "result": f"Deck '{deck}': {len(pool)} cards"}
+            return {"success": False, "result": "Actions: add, quiz, list, delete, stats"}
+        except Exception as e:
+            return {"success": False, "result": f"Flashcard error: {e}"}
+
+
+class QuizTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", params.get("subject", ""))
+        count = min(int(params.get("count", 5)), 20)
+        if not topic:
+            return {"success": False, "result": "Provide a topic/subject"}
+        questions = {
+            "math": [
+                ("What is the derivative of x²?", "2x"),
+                ("What is π to 4 decimal places?", "3.1416"),
+                ("What is the Pythagorean theorem?", "a² + b² = c²"),
+                ("What is the quadratic formula?", "x = (-b ± √(b²-4ac))/2a"),
+                ("What is sin²θ + cos²θ equal to?", "1"),
+                ("What is log₁₀(100)?", "2"),
+                ("What is the area of a circle?", "πr²"),
+                ("What is 7! (7 factorial)?", "5040"),
+            ],
+            "science": [
+                ("What is the chemical symbol for gold?", "Au"),
+                ("What planet is closest to the sun?", "Mercury"),
+                ("What gas do plants absorb?", "CO₂ (carbon dioxide)"),
+                ("What is the speed of light?", "~3×10⁸ m/s"),
+                ("What organ pumps blood?", "Heart"),
+                ("What is H₂O?", "Water"),
+                ("What element has atomic number 6?", "Carbon"),
+                ("What force keeps planets in orbit?", "Gravity"),
+            ],
+            "history": [
+                ("What year did WW2 end?", "1945"),
+                ("Who discovered America in 1492?", "Christopher Columbus"),
+                ("What empire was ruled by Julius Caesar?", "Roman Empire"),
+                ("What wall separated Berlin?", "Berlin Wall"),
+                ("Who wrote the Declaration of Independence?", "Thomas Jefferson"),
+                ("What ancient wonder was in Giza?", "The Great Pyramid"),
+            ],
+            "english": [
+                ("What is a synonym for 'happy'?", "Joyful"),
+                ("What tense describes ongoing action?", "Present continuous"),
+                ("What is a metaphor?", "Comparison without 'like/as'"),
+                ("What is a protagonist?", "Main character"),
+                ("What is alliteration?", "Same starting sound repetition"),
+            ],
+        }
+        topic_lower = topic.lower()
+        for key in questions:
+            if key in topic_lower or topic_lower in key:
+                pool = questions[key]
+                random.shuffle(pool)
+                n = min(count, len(pool))
+                lines = [f"Quiz: {key.title()} ({n} questions)"]
+                for i, (q, a) in enumerate(pool[:n], 1):
+                    lines.append(f"{i}. {q}\n   → {a}")
+                return {"success": True, "result": "\n\n".join(lines)}
+        # Generate generic quiz
+        lines = [f"Quiz: {topic} ({count} questions)\n"]
+        for i in range(count):
+            lines.append(f"{i+1}. What is a key concept in {topic}?")
+        return {"success": True, "result": "\n".join(lines) + "\n\n(Add specific quiz topics: math, science, history, english)"}
+
+
+class StudySetTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "create")
+        path = os.path.join(_STUDY_DIR, "studysets.json")
+        try:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    sets = json.load(f)
+            else:
+                sets = {}
+            if action == "create":
+                name = params.get("name", "").strip()
+                items_str = params.get("items", "")
+                if not name or not items_str:
+                    return {"success": False, "result": "Provide name + items (comma-separated)"}
+                items = [i.strip() for i in items_str.split(",") if i.strip()]
+                sets[name] = {"items": items, "created": time.time()}
+                with open(path, "w") as f:
+                    json.dump(sets, f)
+                return {"success": True, "result": f"Study set '{name}' with {len(items)} items"}
+            elif action == "list":
+                if not sets:
+                    return {"success": True, "result": "No study sets"}
+                lines = [f"Study Sets ({len(sets)}):"]
+                for name, data in sets.items():
+                    lines.append(f"  • {name} ({len(data['items'])} items)")
+                return {"success": True, "result": "\n".join(lines)}
+            elif action == "view":
+                name = params.get("name", "")
+                if name not in sets:
+                    return {"success": False, "result": f"Set '{name}' not found"}
+                items = sets[name]["items"]
+                lines = [f"Study Set: {name}\n"]
+                for i, item in enumerate(items, 1):
+                    lines.append(f"{i}. {item}")
+                return {"success": True, "result": "\n".join(lines)}
+            elif action == "delete":
+                name = params.get("name", "")
+                if name in sets:
+                    del sets[name]
+                    with open(path, "w") as f:
+                        json.dump(sets, f)
+                    return {"success": True, "result": f"Deleted: {name}"}
+                return {"success": False, "result": f"Set '{name}' not found"}
+            return {"success": False, "result": "Actions: create, list, view, delete"}
+        except Exception as e:
+            return {"success": False, "result": f"StudySet error: {e}"}
+
+
+class GradeCalcTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "needed")
+        if action == "needed":
+            try:
+                current = float(params.get("current", params.get("grade", 0)))
+                desired = float(params.get("desired", params.get("target", 0)))
+                weight = float(params.get("weight", params.get("exam_weight", 0)))
+                if not (0 <= weight <= 100):
+                    return {"success": False, "result": "Weight must be 0-100"}
+                w = weight / 100.0
+                needed = (desired - current * (1 - w)) / w
+                if needed > 100:
+                    return {"success": True, "result": f"Need {needed:.1f}% — impossible even with 100%"}
+                elif needed < 0:
+                    return {"success": True, "result": "You already have the grade locked in!"}
+                return {"success": True, "result": f"Need {needed:.1f}% on the final to get {desired}%"}
+            except (ValueError, ZeroDivisionError):
+                return {"success": False, "result": "Provide: current, desired, weight"}
+        elif action == "final":
+            try:
+                grades_str = params.get("grades", "")
+                weights_str = params.get("weights", "")
+                if not grades_str or not weights_str:
+                    return {"success": False, "result": "Provide comma-separated grades and weights"}
+                grades = [float(g.strip()) for g in grades_str.split(",")]
+                weights = [float(w.strip()) for w in weights_str.split(",")]
+                if len(grades) != len(weights):
+                    return {"success": False, "result": "Same number of grades and weights required"}
+                total = sum(g * w / 100 for g, w in zip(grades, weights))
+                return {"success": True, "result": f"Grade: {total:.1f}%"}
+            except Exception:
+                return {"success": False, "result": "Grades and weights must be numbers"}
+        return {"success": False, "result": "Actions: needed (what-if), final (weighted total)"}
+
+
+class GPATool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "calculate")
+        scale = float(params.get("scale", 4.0))
+        if action == "calculate":
+            grades_str = params.get("grades", "")
+            hours_str = params.get("hours", params.get("credits", ""))
+            if not grades_str:
+                return {"success": False, "result": "Provide grades (letter or 0-4 values, comma-separated)"}
+            grade_map = {"A+": 4.0, "A": 4.0, "A-": 3.7, "B+": 3.3, "B": 3.0, "B-": 2.7,
+                         "C+": 2.3, "C": 2.0, "C-": 1.7, "D+": 1.3, "D": 1.0, "F": 0.0}
+            parts = [g.strip() for g in grades_str.split(",")]
+            grades = []
+            for g in parts:
+                if g.upper() in grade_map:
+                    grades.append(grade_map[g.upper()])
+                else:
+                    try:
+                        grades.append(float(g))
+                    except ValueError:
+                        return {"success": False, "result": f"Invalid grade: {g}"}
+            if hours_str:
+                hours = [float(h.strip()) for h in hours_str.split(",")]
+                if len(grades) != len(hours):
+                    return {"success": False, "result": "Same number of grades and credit hours required"}
+                total = sum(g * h for g, h in zip(grades, hours)) / sum(hours) * scale / 4.0
+                return {"success": True, "result": f"GPA: {total:.2f} / {scale:.1f}"}
+            else:
+                total = sum(grades) / len(grades) * scale / 4.0
+                return {"success": True, "result": f"GPA: {total:.2f} / {scale:.1f}"}
+        elif action == "target":
+            try:
+                current_gpa = float(params.get("current_gpa", 0))
+                target_gpa = float(params.get("target_gpa", 0))
+                credits_so_far = float(params.get("credits_so_far", 0))
+                new_credits = float(params.get("new_credits", 0))
+                needed = (target_gpa * (credits_so_far + new_credits) - current_gpa * credits_so_far) / new_credits
+                return {"success": True, "result": f"Need avg GPA of {needed:.2f} in {new_credits:.0f} new credits to reach {target_gpa:.2f}"}
+            except (ValueError, ZeroDivisionError):
+                return {"success": False, "result": "Provide: current_gpa, target_gpa, credits_so_far, new_credits"}
+        return {"success": False, "result": "Actions: calculate, target"}
+
+
+class AssignmentTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "add")
+        path = os.path.join(_STUDY_DIR, "assignments.json")
+        try:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    assignments = json.load(f)
+            else:
+                assignments = []
+            if action == "add":
+                name = params.get("name", params.get("title", ""))
+                due = params.get("due", params.get("due_date", ""))
+                course = params.get("course", params.get("class", "General"))
+                if not name or not due:
+                    return {"success": False, "result": "Provide name + due date"}
+                assignments.append({"name": name, "due": due, "course": course,
+                                    "status": "pending", "created": time.time()})
+                with open(path, "w") as f:
+                    json.dump(assignments, f)
+                return {"success": True, "result": f"Added: {name} (due {due})"}
+            elif action == "list":
+                if not assignments:
+                    return {"success": True, "result": "No assignments"}
+                course = params.get("course", "")
+                pool = [a for a in assignments if not course or a.get("course") == course]
+                pending = [a for a in pool if a.get("status") != "done"]
+                done = [a for a in pool if a.get("status") == "done"]
+                lines = [f"Assignments ({len(pool)} total, {len(pending)} pending):"]
+                if pending:
+                    lines.append("\nPending:")
+                    for a in sorted(pending, key=lambda x: x.get("due", "")):
+                        lines.append(f"  • {a['name']} — due {a['due']} [{a.get('course','General')}]")
+                if done:
+                    lines.append(f"\nCompleted ({len(done)}):")
+                    for a in done:
+                        lines.append(f"  ✓ {a['name']}")
+                return {"success": True, "result": "\n".join(lines)}
+            elif action == "done":
+                name = params.get("name", params.get("title", ""))
+                for a in assignments:
+                    if a["name"].lower() == name.lower():
+                        a["status"] = "done"
+                        with open(path, "w") as f:
+                            json.dump(assignments, f)
+                        return {"success": True, "result": f"Completed: {a['name']}"}
+                return {"success": False, "result": f"Assignment not found: {name}"}
+            elif action == "delete":
+                name = params.get("name", params.get("title", ""))
+                assignments = [a for a in assignments if a["name"].lower() != name.lower()]
+                with open(path, "w") as f:
+                    json.dump(assignments, f)
+                return {"success": True, "result": f"Deleted: {name}"}
+            return {"success": False, "result": "Actions: add, list, done, delete"}
+        except Exception as e:
+            return {"success": False, "result": f"Assignment error: {e}"}
+
+
+class StudyTimerTool(BaseTool):
+    def __init__(self):
+        self._timer_thread = None
+        self._running = False
+        self._remaining = 0
+
+    def execute(self, params):
+        action = params.get("action", "start")
+        if action == "start":
+            minutes = int(params.get("minutes", params.get("duration", 25)))
+            self._remaining = minutes * 60
+            self._running = True
+            if not self._timer_thread or not self._timer_thread.is_alive():
+                self._timer_thread = threading.Thread(target=self._run, daemon=True)
+                self._timer_thread.start()
+            return {"success": True, "result": f"Study timer: {minutes} min (Pomodoro). Focus!"}
+        elif action == "stop":
+            self._running = False
+            return {"success": True, "result": "Timer stopped"}
+        elif action == "status":
+            if self._running:
+                mins, secs = divmod(self._remaining, 60)
+                return {"success": True, "result": f"Time remaining: {mins}:{secs:02d}"}
+            return {"success": True, "result": "Timer not running"}
+
+    def _run(self):
+        while self._running and self._remaining > 0:
+            time.sleep(1)
+            self._remaining -= 1
+        if self._running:
+            self._running = False
+            try:
+                if os.name == 'nt':
+                    import winsound
+                    winsound.Beep(880, 500)
+                    winsound.Beep(660, 500)
+                else:
+                    print("\a")
+            except Exception:
+                pass
+
+
+class AttendanceTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "record")
+        path = os.path.join(_STUDY_DIR, "attendance.json")
+        try:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    data = json.load(f)
+            else:
+                data = {"students": {}, "records": []}
+            if action == "add_student":
+                name = params.get("name", "").strip()
+                if not name:
+                    return {"success": False, "result": "Provide student name"}
+                sid = params.get("id", name.lower().replace(" ", "_"))
+                if sid in data["students"]:
+                    return {"success": False, "result": f"Student '{name}' already exists"}
+                data["students"][sid] = {"name": name, "added": time.time()}
+                with open(path, "w") as f:
+                    json.dump(data, f)
+                return {"success": True, "result": f"Added student: {name}"}
+            elif action == "record":
+                sid = params.get("id", params.get("student", ""))
+                date = params.get("date", datetime.date.today().isoformat())
+                present = params.get("present", True)
+                if isinstance(present, str):
+                    present = present.lower() in ("true", "yes", "1", "present")
+                if sid not in data["students"]:
+                    return {"success": False, "result": f"Student not found. Use add_student first."}
+                data["records"].append({"student_id": sid, "date": date, "present": present})
+                with open(path, "w") as f:
+                    json.dump(data, f)
+                return {"success": True, "result": f"Recorded {'present' if present else 'absent'} for {data['students'][sid]['name']} on {date}"}
+            elif action == "report":
+                sid = params.get("id", params.get("student", ""))
+                if sid:
+                    if sid not in data["students"]:
+                        return {"success": False, "result": f"Student not found: {sid}"}
+                    records = [r for r in data["records"] if r["student_id"] == sid]
+                    total = len(records)
+                    present = sum(1 for r in records if r["present"])
+                    pct = (present / total * 100) if total else 0
+                    return {"success": True, "result": f"{data['students'][sid]['name']}: {present}/{total} ({pct:.0f}%)"}
+                lines = ["Attendance Report:"]
+                for sid, s in data["students"].items():
+                    records = [r for r in data["records"] if r["student_id"] == sid]
+                    total = len(records)
+                    present = sum(1 for r in records if r["present"])
+                    pct = (present / total * 100) if total else 0
+                    lines.append(f"  {s['name']}: {present}/{total} ({pct:.0f}%)")
+                return {"success": True, "result": "\n".join(lines)}
+            elif action == "students":
+                lines = [f"Students ({len(data['students'])}):"]
+                for sid, s in data["students"].items():
+                    lines.append(f"  {s['name']} ({sid})")
+                return {"success": True, "result": "\n".join(lines)}
+            return {"success": False, "result": "Actions: add_student, record, report, students"}
+        except Exception as e:
+            return {"success": False, "result": f"Attendance error: {e}"}
+
+
+class EssayOutlineTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "")
+        style = params.get("style", "argumentative")
+        paragraphs = min(int(params.get("paragraphs", params.get("count", 5))), 15)
+        if not topic:
+            return {"success": False, "result": "Provide essay topic"}
+        templates = {
+            "argumentative": [
+                "I. Introduction", "   A. Hook / attention grabber",
+                f"   B. Background on {topic}", "   C. Thesis statement (your position)",
+                "II. Body Paragraph 1 — Main Argument",
+                "   A. Topic sentence", "   B. Evidence / example", "   C. Analysis",
+                "II/III. Body Paragraph 2 — Supporting Argument",
+                "   A. Topic sentence", "   B. Evidence / example", "   C. Analysis",
+                "III/IV. Body Paragraph 3 — Counterargument & Rebuttal",
+                "   A. Opposing view", "   B. Rebuttal with evidence",
+                "V. Conclusion", "   A. Restate thesis", "   B. Summarize main points",
+                "   C. Closing thought / call to action",
+            ],
+            "expository": [
+                "I. Introduction", "   A. Hook", f"   B. Context for {topic}",
+                "   C. Thesis / main idea",
+                "II. Body Paragraph 1 — Key Point 1",
+                "   A. Explanation", "   B. Evidence", "   C. Connection",
+                "III. Body Paragraph 2 — Key Point 2",
+                "   A. Explanation", "   B. Evidence", "   C. Connection",
+                "IV. Body Paragraph 3 — Key Point 3",
+                "   A. Explanation", "   B. Evidence", "   C. Connection",
+                "V. Conclusion", "   A. Summary", "   B. Significance / implications",
+            ],
+            "narrative": [
+                "I. Introduction", "   A. Setting / scene setup",
+                "   B. Characters involved", "   C. Thesis / central theme",
+                "II. Rising Action / Events",
+                "   A. Event 1", "   B. Event 2", "   C. Event 3",
+                "III. Climax / Turning Point",
+                "   A. Key moment", "   B. Emotional impact",
+                "IV. Falling Action", "   A. Consequences", "   B. Resolution begins",
+                "V. Conclusion", "   A. Reflection / lesson learned",
+                "   B. Closing image or thought",
+            ],
+        }
+        lines = [f"Essay Outline: {topic}", f"Style: {style}", "=" * 40]
+        if style.lower() in templates:
+            lines.extend(templates[style.lower()])
+        else:
+            lines.append(f"I. Introduction (on {topic})")
+            for i in range(2, paragraphs):
+                lines.append(f"{chr(64+i)}. Body Paragraph {i-1}")
+                lines.append(f"   A. Main point / evidence")
+            lines.append(f"{chr(64+paragraphs)}. Conclusion")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class CitationTool(BaseTool):
+    def execute(self, params):
+        style = params.get("style", "mla").lower()
+        source_type = params.get("type", "book").lower()
+        author = params.get("author", "")
+        title = params.get("title", "")
+        publisher = params.get("publisher", "")
+        year = params.get("year", params.get("date", ""))
+        pages = params.get("pages", params.get("page", ""))
+        url = params.get("url", "")
+        journal = params.get("journal", params.get("publication", ""))
+        volume = params.get("volume", "")
+        issue = params.get("issue", params.get("number", ""))
+        website = params.get("website", publisher)
+        if not title:
+            return {"success": False, "result": "At minimum, provide the title"}
+        auth_part = f"{author}. " if author else ""
+        title_part = f"\"{title}.\" " if source_type in ("article", "webpage", "chapter") else f"*{title}.* "
+        if style == "mla":
+            if source_type == "book":
+                citation = f"{auth_part}*{title}.* {publisher}{', ' + year if year else ''}."
+            elif source_type == "article":
+                citation = f"{auth_part}\"{title}.\" *{journal}*{', vol. ' + volume if volume else ''}{', no. ' + issue if issue else ''}{' (' + year + ')' if year else ''}{': ' + pages if pages else ''}."
+            elif source_type == "website":
+                citation = f"{auth_part}\"{title}.\" *{website}*{', ' + year if year else ''}{', ' + url if url else ''}."
+            else:
+                citation = f"{auth_part}*{title}.* {publisher if publisher else 'n.p.'}, {year if year else 'n.d.'}."
+        elif style == "apa":
+            year_part = f"({year})" if year else "(n.d.)"
+            if source_type == "book":
+                citation = f"{author}{', ' if author else ''}{year_part}. *{title}*. {publisher}."
+            elif source_type == "article":
+                citation = f"{author}{', ' if author else ''}{year_part}. {title}. *{journal}*{', ' + volume if volume else ''}{'(' + issue + ')' if issue else ''}{', ' + pages if pages else ''}.{'' + url if url else ''}"
+            elif source_type == "website":
+                citation = f"{author}{', ' if author else ''}{year_part}. {title}. {website}. {url}"
+            else:
+                citation = f"{author}{', ' if author else ''}{year_part}. *{title}*. {publisher if publisher else 'n.p.'}."
+        elif style == "chicago":
+            if source_type == "book":
+                citation = f"{author}. *{title}*. {publisher}, {year}."
+            elif source_type == "article":
+                citation = f"{author}. \"{title}.\" *{journal}* {volume}, no. {issue} ({year}): {pages}."
+            elif source_type == "website":
+                citation = f"{author}. \"{title}.\" {website}. {url}."
+            else:
+                citation = f"{author}. *{title}*. {publisher}, {year}."
+        else:
+            return {"success": False, "result": "Styles: mla, apa, chicago"}
+        return {"success": True, "result": citation}
+
+
+class ThesaurusTool(BaseTool):
+    _DATA = {
+        "good": {"synonyms": ["excellent", "fine", "satisfactory", "superb", "quality"],
+                 "antonyms": ["bad", "poor", "inferior", "terrible"]},
+        "bad": {"synonyms": ["poor", "terrible", "awful", "inferior", "substandard"],
+                "antonyms": ["good", "excellent", "superb"]},
+        "big": {"synonyms": ["large", "huge", "enormous", "massive", "vast", "immense"],
+                "antonyms": ["small", "tiny", "minute"]},
+        "small": {"synonyms": ["tiny", "minute", "compact", "petite", "minor"],
+                  "antonyms": ["big", "large", "huge", "enormous"]},
+        "happy": {"synonyms": ["joyful", "cheerful", "delighted", "elated", "glad"],
+                  "antonyms": ["sad", "unhappy", "miserable", "gloomy"]},
+        "sad": {"synonyms": ["unhappy", "miserable", "gloomy", "melancholy", "sorrowful"],
+                "antonyms": ["happy", "joyful", "elated", "cheerful"]},
+        "smart": {"synonyms": ["intelligent", "clever", "brilliant", "bright", "sharp"],
+                  "antonyms": ["stupid", "dull", "dumb"]},
+        "beautiful": {"synonyms": ["gorgeous", "stunning", "lovely", "attractive", "magnificent"],
+                      "antonyms": ["ugly", "hideous", "plain"]},
+        "fast": {"synonyms": ["quick", "rapid", "swift", "speedy", "hasty"],
+                 "antonyms": ["slow", "sluggish", "leisurely"]},
+        "slow": {"synonyms": ["sluggish", "leisurely", "unhurried", "gradual"],
+                 "antonyms": ["fast", "quick", "rapid", "swift"]},
+        "important": {"synonyms": ["significant", "crucial", "vital", "essential", "key"],
+                      "antonyms": ["unimportant", "trivial", "minor"]},
+        "difficult": {"synonyms": ["hard", "challenging", "tough", "complex", "demanding"],
+                      "antonyms": ["easy", "simple", "effortless"]},
+        "easy": {"synonyms": ["simple", "effortless", "straightforward", "basic"],
+                 "antonyms": ["difficult", "hard", "challenging", "complex"]},
+        "interesting": {"synonyms": ["engaging", "fascinating", "captivating", "intriguing"],
+                        "antonyms": ["boring", "dull", "tedious"]},
+        "new": {"synonyms": ["fresh", "novel", "modern", "recent", "innovative"],
+                "antonyms": ["old", "ancient", "outdated"]},
+        "old": {"synonyms": ["ancient", "aged", "elderly", "antique", "outdated"],
+                "antonyms": ["new", "young", "fresh", "modern"]},
+        "strong": {"synonyms": ["powerful", "robust", "sturdy", "resilient", "tough"],
+                   "antonyms": ["weak", "fragile", "feeble"]},
+        "weak": {"synonyms": ["fragile", "feeble", "delicate", "frail"],
+                 "antonyms": ["strong", "powerful", "robust", "sturdy"]},
+        "funny": {"synonyms": ["humorous", "amusing", "comical", "hilarious", "witty"],
+                  "antonyms": ["serious", "solemn", "grave"]},
+        "brave": {"synonyms": ["courageous", "fearless", "bold", "valiant", "heroic"],
+                  "antonyms": ["cowardly", "timid", "fearful"]},
+    }
+
+    def execute(self, params):
+        word = params.get("word", "").strip().lower()
+        action = params.get("action", "synonyms")
+        if not word:
+            return {"success": False, "result": "Provide a word"}
+        if word in self._DATA:
+            entry = self._DATA[word]
+            if action == "synonyms":
+                return {"success": True, "result": f"Synonyms for '{word}': {', '.join(entry['synonyms'])}"}
+            elif action == "antonyms":
+                return {"success": True, "result": f"Antonyms for '{word}': {', '.join(entry['antonyms'])}"}
+            elif action == "all":
+                return {"success": True, "result":
+                        f"'{word}'\nSynonyms: {', '.join(entry['synonyms'])}\nAntonyms: {', '.join(entry['antonyms'])}"}
+        return {"success": True, "result": f"No thesaurus entry for '{word}'. Try: good, bad, big, happy, smart, etc."}
+
+
+class StatisticsTool(BaseTool):
+    def execute(self, params):
+        data_str = params.get("data", params.get("numbers", ""))
+        if not data_str:
+            return {"success": False, "result": "Provide comma-separated numbers"}
+        try:
+            nums = [float(x.strip()) for x in data_str.split(",") if x.strip()]
+        except ValueError:
+            return {"success": False, "result": "All values must be numbers"}
+        if len(nums) < 2:
+            return {"success": False, "result": "Need at least 2 numbers"}
+        n = len(nums)
+        s = sum(nums)
+        mean = s / n
+        sorted_nums = sorted(nums)
+        median = sorted_nums[n // 2] if n % 2 else (sorted_nums[n // 2 - 1] + sorted_nums[n // 2]) / 2
+        freq = {}
+        for x in nums:
+            freq[x] = freq.get(x, 0) + 1
+        max_freq = max(freq.values())
+        mode = [str(k) for k, v in freq.items() if v == max_freq]
+        variance = sum((x - mean) ** 2 for x in nums) / n
+        std_dev = math.sqrt(variance)
+        result = (
+            f"Count: {n}\n"
+            f"Sum: {s}\n"
+            f"Mean: {mean:.4f}\n"
+            f"Median: {median:.4f}\n"
+            f"Mode: {', '.join(mode)} (freq: {max_freq})\n"
+            f"Min: {min(nums)}\n"
+            f"Max: {max(nums)}\n"
+            f"Range: {max(nums) - min(nums)}\n"
+            f"Variance: {variance:.4f}\n"
+            f"Std Dev: {std_dev:.4f}"
+        )
+        return {"success": True, "result": result}
+
+
+class PrimeTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "check")
+        try:
+            if action == "check":
+                n = int(params.get("number", params.get("n", 0)))
+                if n < 2:
+                    return {"success": True, "result": f"{n} is not prime"}
+                for i in range(2, int(math.isqrt(n)) + 1):
+                    if n % i == 0:
+                        return {"success": True, "result": f"{n} is not prime (divisible by {i})"}
+                return {"success": True, "result": f"{n} is prime!"}
+            elif action == "factors":
+                n = int(params.get("number", params.get("n", 0)))
+                if n < 2:
+                    return {"success": True, "result": f"{n}: no prime factors"}
+                temp = n
+                factors = []
+                for i in range(2, int(math.isqrt(n)) + 1):
+                    while temp % i == 0:
+                        factors.append(i)
+                        temp //= i
+                if temp > 1:
+                    factors.append(temp)
+                return {"success": True, "result": f"Factors of {n}: {' × '.join(map(str, factors))}"}
+            elif action == "list":
+                limit = int(params.get("limit", params.get("max", 100)))
+                sieve = [True] * (limit + 1)
+                sieve[0] = sieve[1] = False
+                for i in range(2, int(math.isqrt(limit)) + 1):
+                    if sieve[i]:
+                        for j in range(i * i, limit + 1, i):
+                            sieve[j] = False
+                primes = [str(i) for i, is_p in enumerate(sieve) if is_p]
+                return {"success": True, "result": f"Primes up to {limit} ({len(primes)}):\n{', '.join(primes[:50])}" + ("..." if len(primes) > 50 else "")}
+            elif action == "next":
+                n = int(params.get("number", params.get("n", 0)))
+                candidate = n + 1
+                while True:
+                    is_p = candidate >= 2
+                    for i in range(2, int(math.isqrt(candidate)) + 1):
+                        if candidate % i == 0:
+                            is_p = False
+                            break
+                    if is_p:
+                        return {"success": True, "result": f"Next prime after {n}: {candidate}"}
+                    candidate += 1
+            return {"success": False, "result": "Actions: check, factors, list, next"}
+        except ValueError:
+            return {"success": False, "result": "Provide a valid number"}
+
+
+class MatrixTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "add")
+        try:
+            a_str = params.get("a", params.get("matrix_a", ""))
+            b_str = params.get("b", params.get("matrix_b", ""))
+            if not a_str:
+                return {"success": False, "result": "Provide matrix_a (rows; separated by |, values comma-separated)"}
+            def parse(m):
+                rows = m.split("|")
+                return [[float(x.strip()) for x in row.split(",") if x.strip()] for row in rows if row.strip()]
+            a = parse(a_str)
+            if action == "add":
+                b = parse(b_str)
+                if len(a) != len(b) or len(a[0]) != len(b[0]):
+                    return {"success": False, "result": "Matrices must have same dimensions"}
+                result = [[a[i][j] + b[i][j] for j in range(len(a[0]))] for i in range(len(a))]
+            elif action == "multiply":
+                b = parse(b_str)
+                if len(a[0]) != len(b):
+                    return {"success": False, "result": f"Cannot multiply {len(a)}x{len(a[0])} by {len(b)}x{len(b[0])}"}
+                result = [[sum(a[i][k] * b[k][j] for k in range(len(a[0]))) for j in range(len(b[0]))] for i in range(len(a))]
+            elif action == "determinant":
+                if len(a) != len(a[0]):
+                    return {"success": False, "result": "Matrix must be square"}
+                result = [[self._det(a)]]
+            elif action == "transpose":
+                result = [[a[j][i] for j in range(len(a))] for i in range(len(a[0]))]
+            else:
+                return {"success": False, "result": "Actions: add, multiply, determinant, transpose"}
+            lines = [f"Result ({len(result)}x{len(result[0])}):"]
+            for row in result:
+                lines.append("  [" + ", ".join(f"{v:.2f}" for v in row) + "]")
+            return {"success": True, "result": "\n".join(lines)}
+        except Exception as e:
+            return {"success": False, "result": f"Matrix error: {e}"}
+
+    def _det(self, m):
+        if len(m) == 1:
+            return m[0][0]
+        if len(m) == 2:
+            return m[0][0] * m[1][1] - m[0][1] * m[1][0]
+        d = 0
+        for c in range(len(m)):
+            sub = [[m[r][cc] for cc in range(len(m)) if cc != c] for r in range(1, len(m))]
+            d += ((-1) ** c) * m[0][c] * self._det(sub)
+        return d
+
+
+class PeriodicTableTool(BaseTool):
+    _ELEMENTS = [
+        ("H", "Hydrogen", 1, 1.008, "Nonmetal"), ("He", "Helium", 2, 4.003, "Noble Gas"),
+        ("Li", "Lithium", 3, 6.941, "Alkali Metal"), ("Be", "Beryllium", 4, 9.012, "Alkaline Earth"),
+        ("B", "Boron", 5, 10.811, "Metalloid"), ("C", "Carbon", 6, 12.011, "Nonmetal"),
+        ("N", "Nitrogen", 7, 14.007, "Nonmetal"), ("O", "Oxygen", 8, 15.999, "Nonmetal"),
+        ("F", "Fluorine", 9, 18.998, "Halogen"), ("Ne", "Neon", 10, 20.180, "Noble Gas"),
+        ("Na", "Sodium", 11, 22.990, "Alkali Metal"), ("Mg", "Magnesium", 12, 24.305, "Alkaline Earth"),
+        ("Al", "Aluminum", 13, 26.982, "Metal"), ("Si", "Silicon", 14, 28.086, "Metalloid"),
+        ("P", "Phosphorus", 15, 30.974, "Nonmetal"), ("S", "Sulfur", 16, 32.065, "Nonmetal"),
+        ("Cl", "Chlorine", 17, 35.453, "Halogen"), ("Ar", "Argon", 18, 39.948, "Noble Gas"),
+        ("K", "Potassium", 19, 39.098, "Alkali Metal"), ("Ca", "Calcium", 20, 40.078, "Alkaline Earth"),
+        ("Fe", "Iron", 26, 55.845, "Transition Metal"), ("Cu", "Copper", 29, 63.546, "Transition Metal"),
+        ("Zn", "Zinc", 30, 65.380, "Transition Metal"), ("Ag", "Silver", 47, 107.868, "Transition Metal"),
+        ("Au", "Gold", 79, 196.967, "Transition Metal"), ("Hg", "Mercury", 80, 200.590, "Transition Metal"),
+        ("Pb", "Lead", 82, 207.200, "Metal"), ("U", "Uranium", 92, 238.029, "Actinide"),
+    ]
+    _DICT = {e[0].lower(): e for e in _ELEMENTS}
+    _DICT.update({e[1].lower(): e for e in _ELEMENTS})
+    _DICT.update({str(e[2]): e for e in _ELEMENTS})
+
+    def execute(self, params):
+        query = params.get("element", params.get("query", "")).strip().lower()
+        if not query:
+            lines = ["Periodic Table — Quick Reference:", ""]
+            for sym, name, num, mass, cat in self._ELEMENTS:
+                lines.append(f"  {num:3d} {sym:3s} {name:12s} {mass:7.3f}  {cat}")
+            return {"success": True, "result": "\n".join(lines)}
+        entry = self._DICT.get(query)
+        if not entry:
+            return {"success": False, "result": f"Element not found. Try: H, Helium, 6, etc."}
+        sym, name, num, mass, cat = entry
+        return {"success": True, "result":
+                f"Element: {name} ({sym})\n"
+                f"Atomic Number: {num}\n"
+                f"Atomic Mass: {mass:.3f} u\n"
+                f"Category: {cat}"}
+
+
+class PhysicsRefTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", params.get("query", "")).strip().lower()
+        formulas = {
+            "kinematics": {
+                "desc": "Motion equations",
+                "formulas": [
+                    "v = u + at",
+                    "s = ut + ½at²",
+                    "v² = u² + 2as",
+                    "s = ½(u + v)t",
+                ]
+            },
+            "newton": {
+                "desc": "Newton's Laws",
+                "formulas": [
+                    "F = ma (2nd Law)",
+                    "F = G·m₁·m₂ / r² (Gravity)",
+                    "Weight = mg",
+                    "Friction = μN",
+                ]
+            },
+            "energy": {
+                "desc": "Energy & Work",
+                "formulas": [
+                    "KE = ½mv²",
+                    "PE = mgh",
+                    "Work = F·d·cosθ",
+                    "Power = W / t",
+                ]
+            },
+            "electricity": {
+                "desc": "Electricity",
+                "formulas": [
+                    "V = IR (Ohm's Law)",
+                    "P = VI",
+                    "E = V·I·t",
+                    "R = ρL / A",
+                    "C = Q / V",
+                ]
+            },
+            "waves": {
+                "desc": "Waves & Optics",
+                "formulas": [
+                    "v = fλ",
+                    "n₁·sinθ₁ = n₂·sinθ₂ (Snell's Law)",
+                    "1/f = 1/v + 1/u (Lens)",
+                    "E = hf (Photon)",
+                ]
+            },
+            "thermodynamics": {
+                "desc": "Thermodynamics",
+                "formulas": [
+                    "Q = mcΔT (Heat)",
+                    "PV = nRT (Ideal Gas)",
+                    "ΔU = Q - W (1st Law)",
+                    "e = 1 - T_c/T_h (Carnot)",
+                ]
+            },
+        }
+        if not topic:
+            lines = ["Physics Formulas — Topics:"]
+            for k, v in formulas.items():
+                lines.append(f"  • {k}: {v['desc']}")
+            return {"success": True, "result": "\n".join(lines)}
+        topic_key = None
+        for k in formulas:
+            if topic in k or k in topic:
+                topic_key = k
+                break
+        if not topic_key:
+            return {"success": True, "result": f"Topics: {', '.join(formulas.keys())}"}
+        entry = formulas[topic_key]
+        lines = [f"{entry['desc'].upper()}:", ""]
+        lines.extend(entry["formulas"])
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class FormulaTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", params.get("query", "")).strip().lower()
+        formulas = {
+            "area": {
+                "desc": "Area formulas",
+                "entries": [
+                    ("Circle", "A = πr²"),
+                    ("Triangle", "A = ½bh"),
+                    ("Rectangle", "A = lw"),
+                    ("Trapezoid", "A = ½(a+b)h"),
+                    ("Sphere surface", "A = 4πr²"),
+                ]
+            },
+            "volume": {
+                "desc": "Volume formulas",
+                "entries": [
+                    ("Cube", "V = s³"),
+                    ("Sphere", "V = ⁴⁄₃πr³"),
+                    ("Cylinder", "V = πr²h"),
+                    ("Cone", "V = ⅓πr²h"),
+                    ("Pyramid", "V = ⅓Bh"),
+                ]
+            },
+            "geometry": {
+                "desc": "Geometry",
+                "entries": [
+                    ("Pythagorean", "a² + b² = c²"),
+                    ("Circumference", "C = 2πr"),
+                    ("Distance", "d = √((x₂-x₁)² + (y₂-y₁)²)"),
+                    ("Midpoint", "M = ((x₁+x₂)/2, (y₁+y₂)/2)"),
+                ]
+            },
+            "trigonometry": {
+                "desc": "Trigonometry",
+                "entries": [
+                    ("sin θ = opposite/hypotenuse", "sin²θ + cos²θ = 1"),
+                    ("cos θ = adjacent/hypotenuse", "tan θ = sinθ/cosθ"),
+                    ("Law of Sines", "a/sinA = b/sinB = c/sinC"),
+                    ("Law of Cosines", "c² = a² + b² - 2ab·cosC"),
+                ]
+            },
+            "calculus": {
+                "desc": "Calculus",
+                "entries": [
+                    ("Derivative", "d/dx xⁿ = nxⁿ⁻¹"),
+                    ("Power rule", "∫xⁿ dx = xⁿ⁺¹/(n+1) + C"),
+                    ("Product rule", "(fg)' = f'g + fg'"),
+                    ("Chain rule", "f(g(x))' = f'(g(x))·g'(x)"),
+                ]
+            },
+            "algebra": {
+                "desc": "Algebra",
+                "entries": [
+                    ("Quadratic formula", "x = (-b ± √(b²-4ac)) / 2a"),
+                    ("Slope", "m = (y₂-y₁)/(x₂-x₁)"),
+                    ("Logarithm", "log_b(x) = y → bʸ = x"),
+                    ("Binomial", "(a+b)ⁿ = Σ(k=0..n) C(n,k)aⁿ⁻ᵏbᵏ"),
+                ]
+            },
+        }
+        if not topic:
+            lines = ["Math Formulas — Topics:"]
+            for k, v in formulas.items():
+                lines.append(f"  • {k}: {v['desc']}")
+            return {"success": True, "result": "\n".join(lines)}
+        topic_key = None
+        for k in formulas:
+            if topic in k or k in topic:
+                topic_key = k
+                break
+        if not topic_key:
+            return {"success": True, "result": f"Topics: {', '.join(formulas.keys())}"}
+        entry = formulas[topic_key]
+        lines = [f"{entry['desc'].upper()}:", ""]
+        for name, formula in entry["entries"]:
+            lines.append(f"  {name}: {formula}")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class DOILookupTool(BaseTool):
+    def execute(self, params):
+        doi = params.get("doi", params.get("id", "")).strip()
+        if not doi:
+            return {"success": False, "result": "Provide a DOI (e.g., 10.1038/nature12373)"}
+        try:
+            url = f"https://api.crossref.org/works/{urllib.parse.quote(doi)}"
+            req = urllib.request.Request(url, headers={"User-Agent": "JARVIS/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read())
+            msg = data.get("message", {})
+            title = msg.get("title", ["Unknown"])[0]
+            authors = msg.get("author", [])
+            author_names = [f"{a.get('given','')} {a.get('family','')}".strip() for a in authors[:5]]
+            year = (msg.get("published-print") or msg.get("published-online") or {}).get("date-parts", [[""]])[0][0]
+            journal = msg.get("container-title", [""])[0]
+            publisher = msg.get("publisher", "")
+            lines = [f"DOI: {doi}", f"Title: {title}"]
+            if author_names:
+                lines.append(f"Authors: {', '.join(author_names)}{'…' if len(authors) > 5 else ''}")
+            if year:
+                lines.append(f"Year: {year}")
+            if journal:
+                lines.append(f"Journal: {journal}")
+            if publisher:
+                lines.append(f"Publisher: {publisher}")
+            return {"success": True, "result": "\n".join(lines)}
+        except urllib.error.HTTPError as e:
+            return {"success": False, "result": f"DOI not found (HTTP {e.code})"}
+        except Exception as e:
+            return {"success": False, "result": f"DOI lookup error: {e}"}
+
+
+class ArxivTool(BaseTool):
+    def execute(self, params):
+        query = params.get("query", params.get("search", ""))
+        count = min(int(params.get("count", params.get("max_results", 5))), 20)
+        if not query:
+            return {"success": False, "result": "Provide a search query"}
+        try:
+            url = f"http://export.arxiv.org/api/query?search_query=all:{urllib.parse.quote(query)}&max_results={count}&sortBy=relevance"
+            req = urllib.request.Request(url, headers={"User-Agent": "JARVIS/1.0"})
+            ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+                data = resp.read().decode()
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(data)
+            ns = {"a": "http://www.w3.org/2005/Atom"}
+            entries = root.findall("a:entry", ns)
+            if not entries:
+                return {"success": True, "result": "No results found"}
+            lines = [f"arXiv results for '{query}':"]
+            for entry in entries[:count]:
+                title = entry.find("a:title", ns).text.strip().replace("\n", " ")
+                authors = [a.find("a:name", ns).text for a in entry.findall("a:author", ns)][:3]
+                link = entry.find("a:id", ns).text
+                published = entry.find("a:published", ns).text[:10]
+                lines.append(f"\n• {title}")
+                lines.append(f"  Authors: {', '.join(authors)}{'…' if len(authors) > 3 else ''}")
+                lines.append(f"  {published} | {link}")
+            return {"success": True, "result": "\n".join(lines)}
+        except Exception as e:
+            return {"success": False, "result": f"Arxiv error: {e}"}
+
+
+class VocabTool(BaseTool):
+    _WORDS = [
+        ("ephemeral", "lasting for a very short time", "The ephemeral beauty of cherry blossoms"),
+        ("ubiquitous", "present everywhere at once", "Smartphones have become ubiquitous"),
+        ("pragmatic", "dealing with things practically", "A pragmatic approach to problem-solving"),
+        ("ambiguous", "open to multiple interpretations", "The ambiguous wording confused everyone"),
+        ("paradigm", "a typical example or pattern", "A shift in the scientific paradigm"),
+        ("eloquent", "fluent and persuasive in speaking", "An eloquent speech moved the audience"),
+        ("resilient", "able to recover quickly", "The resilient community rebuilt after the storm"),
+        ("meticulous", "showing great attention to detail", "Her meticulous research was praised"),
+        ("candid", "truthful and straightforward", "A candid conversation about the issues"),
+        ("profound", "very great or intense", "A profound insight changed my perspective"),
+        ("innovative", "introducing new ideas", "The innovative design won awards"),
+        ("diligent", "careful and persistent effort", "A diligent student always does their best"),
+        ("empirical", "based on observation or experience", "Empirical evidence supports the theory"),
+        ("abstract", "existing in thought rather than matter", "Abstract concepts can be hard to grasp"),
+        ("collaborate", "work jointly on an activity", "Teams collaborate on complex projects"),
+    ]
+
+    def execute(self, params):
+        action = params.get("action", "random")
+        if action == "random":
+            word, meaning, example = random.choice(self._WORDS)
+            return {"success": True, "result": f"📖 {word}\n  Definition: {meaning}\n  Example: \"{example}\""}
+        elif action == "list":
+            lines = ["Vocabulary Builder:"]
+            for word, meaning, _ in self._WORDS:
+                lines.append(f"  • {word}: {meaning}")
+            return {"success": True, "result": "\n".join(lines)}
+        elif action == "search":
+            q = params.get("word", "").strip().lower()
+            for word, meaning, example in self._WORDS:
+                if q == word.lower():
+                    return {"success": True, "result": f"📖 {word}\n  Definition: {meaning}\n  Example: \"{example}\""}
+            return {"success": False, "result": f"Word '{q}' not in vocabulary. Try: random, list"}
+        return {"success": False, "result": "Actions: random, list, search"}
+
+
+class MnemonicTool(BaseTool):
+    PATTERNS = {
+        "acronym": lambda words: "".join(w[0].upper() for w in words if w),
+        "sentence": lambda words: " ".join(w if random.random() > 0.5 else w.upper() for w in words),
+        "rhyme": lambda words: f"{' '.join(words[:2])} is what you need, {words[-1] if len(words) > 2 else ''} is the key!",
+    }
+
+    def execute(self, params):
+        items_str = params.get("items", params.get("words", ""))
+        pattern = params.get("pattern", "acronym")
+        if not items_str:
+            return {"success": False, "result": "Provide items to memorize (comma-separated)"}
+        words = [w.strip() for w in items_str.split(",") if w.strip()]
+        if len(words) < 2:
+            return {"success": False, "result": "Need at least 2 items"}
+        if pattern == "acronym":
+            acro = "".join(w[0].upper() for w in words)
+            result = f"Acronym: {acro}\n  ({', '.join(words)})"
+        elif pattern == "sentence":
+            random.shuffle(words)
+            result = f"Sentence: {' '.join(w if random.random() > 0.4 else w.upper() for w in words)}"
+        elif pattern == "story":
+            story = f"Imagine you are walking through a {words[0].lower()}..."
+            for w in words[1:]:
+                story += f" Suddenly, a {w.lower()} appears!"
+            result = f"Story: {story}"
+        else:
+            return {"success": False, "result": "Patterns: acronym, sentence, story"}
+        return {"success": True, "result": f"Mnemonic ({pattern}):\n{result}"}
+
+
+class NoteSummarizeTool(BaseTool):
+    def execute(self, params):
+        text = params.get("text", params.get("notes", ""))
+        if not text:
+            return {"success": False, "result": "Provide text to summarize"}
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        if len(sentences) <= 2:
+            return {"success": True, "result": f"Summary: {text[:500]}"}
+        words = text.split()
+        total_words = len(words)
+        target = max(1, total_words // 3)
+        # Simple extractive summarization: take first sentence, then pick most informative
+        summary_sentences = [sentences[0]]
+        available = sentences[1:]
+        available.sort(key=lambda s: len(s.split()), reverse=True)
+        current_len = len(summary_sentences[0].split())
+        for s in available:
+            if current_len >= target:
+                break
+            summary_sentences.append(s)
+            current_len += len(s.split())
+        lines = [
+            f"Original: {total_words} words, {len(sentences)} sentences",
+            f"Summary: {len(summary_sentences)} sentences, {current_len} words",
+            "",
+            "Key Points:",
+        ]
+        for i, s in enumerate(summary_sentences, 1):
+            lines.append(f"  {i}. {s}")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class ConjugationTool(BaseTool):
+    _CONJ = {
+        "run": {"base": "run", "past": "ran", "pp": "run", "ing": "running", "s": "runs"},
+        "write": {"base": "write", "past": "wrote", "pp": "written", "ing": "writing", "s": "writes"},
+        "speak": {"base": "speak", "past": "spoke", "pp": "spoken", "ing": "speaking", "s": "speaks"},
+        "eat": {"base": "eat", "past": "ate", "pp": "eaten", "ing": "eating", "s": "eats"},
+        "drink": {"base": "drink", "past": "drank", "pp": "drunk", "ing": "drinking", "s": "drinks"},
+        "go": {"base": "go", "past": "went", "pp": "gone", "ing": "going", "s": "goes"},
+        "be": {"base": "be", "past": "was/were", "pp": "been", "ing": "being", "s": "is"},
+        "have": {"base": "have", "past": "had", "pp": "had", "ing": "having", "s": "has"},
+        "make": {"base": "make", "past": "made", "pp": "made", "ing": "making", "s": "makes"},
+        "take": {"base": "take", "past": "took", "pp": "taken", "ing": "taking", "s": "takes"},
+        "see": {"base": "see", "past": "saw", "pp": "seen", "ing": "seeing", "s": "sees"},
+        "know": {"base": "know", "past": "knew", "pp": "known", "ing": "knowing", "s": "knows"},
+        "think": {"base": "think", "past": "thought", "pp": "thought", "ing": "thinking", "s": "thinks"},
+        "give": {"base": "give", "past": "gave", "pp": "given", "ing": "giving", "s": "gives"},
+        "find": {"base": "find", "past": "found", "pp": "found", "ing": "finding", "s": "finds"},
+        "tell": {"base": "tell", "past": "told", "pp": "told", "ing": "telling", "s": "tells"},
+        "read": {"base": "read", "past": "read", "pp": "read", "ing": "reading", "s": "reads"},
+        "teach": {"base": "teach", "past": "taught", "pp": "taught", "ing": "teaching", "s": "teaches"},
+        "learn": {"base": "learn", "past": "learned", "pp": "learned", "ing": "learning", "s": "learns"},
+        "study": {"base": "study", "past": "studied", "pp": "studied", "ing": "studying", "s": "studies"},
+    }
+
+    def execute(self, params):
+        verb = params.get("verb", params.get("word", "")).strip().lower()
+        tense = params.get("tense", params.get("action", "all"))
+        if not verb:
+            return {"success": True, "result":
+                    f"Verb Conjugation (irregular verbs):\n{', '.join(sorted(self._CONJ.keys()))}\n\nRegular verbs: add -ed for past, -ing for continuous"}
+        if verb in self._CONJ:
+            v = self._CONJ[verb]
+            if tense == "past":
+                return {"success": True, "result": f"Past tense of '{verb}': {v['past']}"}
+            elif tense == "present":
+                return {"success": True, "result": f"Present tense of '{verb}': {v['base']} / {v['s']}"}
+            elif tense == "continuous":
+                return {"success": True, "result": f"Continuous of '{verb}': {v['ing']}"}
+            lines = [f"Conjugation: {verb}", "",
+                     f"Base: {v['base']}", f"Past: {v['past']}", f"Past Participle: {v['pp']}",
+                     f"Continuous: {v['ing']}", f"Third Person: {v['s']}"]
+            return {"success": True, "result": "\n".join(lines)}
+        # Regular verb
+        if verb.endswith("e"):
+            past = verb + "d"
+        elif verb.endswith("y") and len(verb) > 2 and verb[-2] not in "aeiou":
+            past = verb[:-1] + "ied"
+        else:
+            past = verb + "ed"
+        ing = verb + ("ing" if not verb.endswith("e") else verb[:-1] + "ing")
+        s = verb + ("s" if not verb.endswith(("s", "x", "ch", "sh", "o")) else verb + "es")
+        lines = [f"Conjugation: {verb}", "", f"Base: {verb}", f"Past: {past}",
+                 f"Past Participle: {past}", f"Continuous: {ing}", f"Third Person: {s}"]
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class SpellCheckTool(BaseTool):
+    def execute(self, params):
+        text = params.get("text", "").strip()
+        if not text:
+            return {"success": False, "result": "Provide text to check"}
+        common_words = {
+            "accomodate": "accommodate", "recieve": "receive", "wierd": "weird",
+            "seperate": "separate", "occured": "occurred", "occurance": "occurrence",
+            "definately": "definitely", "tommorrow": "tomorrow", "calender": "calendar",
+            "neccessary": "necessary", "embarass": "embarrass", "goverment": "government",
+            "alot": "a lot", "untill": "until", "wierd": "weird", "beleive": "believe",
+            "acheive": "achieve", "adress": "address", "begining": "beginning",
+            "commitee": "committee", "concensus": "consensus", "concious": "conscious",
+            "contagious": "contagious", "decieve": "deceive", "desparate": "desperate",
+            "dilemna": "dilemma", "disappear": "disappear", "embarass": "embarrass",
+            "enviornment": "environment", "exagerate": "exaggerate", "febuary": "february",
+            "foriegn": "foreign", "fourty": "forty", "freind": "friend",
+            "guarantee": "guarantee", "harrass": "harass", "hierarchy": "hierarchy",
+            "humour": "humor", "independant": "independent", "interrupt": "interrupt",
+            "jewelery": "jewelry", "judgment": "judgment", "liason": "liaison",
+            "libary": "library", "licence": "license", "maintainance": "maintenance",
+            "millenium": "millennium", "miniscule": "minuscule", "mischievious": "mischievous",
+            "misspell": "misspell", "morgage": "mortgage", "nineth": "ninth",
+            "noticable": "noticeable", "occassion": "occasion", "occurence": "occurrence",
+            "pavillion": "pavilion", "persistant": "persistent", "pharoah": "pharaoh",
+            "playright": "playwright", "posession": "possession", "preceed": "precede",
+            "privilege": "privilege", "priviledge": "privilege", "procede": "proceed",
+            "pronounciation": "pronunciation", "publicly": "publicly", "pumpkim": "pumpkin",
+            "questionaire": "questionnaire", "reccomend": "recommend", "refered": "referred",
+            "refering": "referring", "religous": "religious", "remeber": "remember",
+            "resistence": "resistance", "restaraunt": "restaurant", "rehersal": "rehearsal",
+            "sargeant": "sergeant", "seige": "siege", "similiar": "similar",
+            "skilful": "skillful", "somwhere": "somewhere", "sophmore": "sophomore",
+            "specificaly": "specifically", "sponser": "sponsor", "stomach": "stomach",
+            "supercede": "supersede", "surelly": "surely", "surprize": "surprise",
+            "tatoo": "tattoo", "threshhold": "threshold", "tommorow": "tomorrow",
+            "tounge": "tongue", "truely": "truly", "twelth": "twelfth", "tyrany": "tyranny",
+            "vaccuum": "vacuum", "vegitable": "vegetable", "vehical": "vehicle",
+            "visable": "visible", "wednesday": "wednesday", "wether": "weather",
+            "wich": "which", "writen": "written", "wierd": "weird", "zealous": "zealous",
+        }
+        words = re.findall(r'\b[a-zA-Z]+\b', text)
+        suggestions = []
+        for w in words:
+            lower = w.lower()
+            if lower in common_words and common_words[lower] != lower:
+                suggestions.append(f"  '{w}' → '{common_words[lower]}'")
+        if suggestions:
+            return {"success": True, "result": "Spelling suggestions:\n" + "\n".join(suggestions)}
+        return {"success": True, "result": "No common spelling errors found. ✓"}
+
+
+class GroupPickerTool(BaseTool):
+    def execute(self, params):
+        names_str = params.get("names", params.get("students", ""))
+        group_count = max(1, int(params.get("groups", params.get("count", 0))))
+        per_group = max(1, int(params.get("per_group", 0)))
+        if not names_str:
+            return {"success": False, "result": "Provide comma-separated student names"}
+        names = [n.strip() for n in names_str.split(",") if n.strip()]
+        if len(names) < 2:
+            return {"success": False, "result": "Need at least 2 students"}
+        random.shuffle(names)
+        if group_count > 0:
+            groups = [[] for _ in range(group_count)]
+            for i, name in enumerate(names):
+                groups[i % group_count].append(name)
+        elif per_group > 0:
+            groups = [names[i:i+per_group] for i in range(0, len(names), per_group)]
+        else:
+            return {"success": False, "result": "Provide groups= or per_group="}
+        lines = [f"Groups ({len(names)} students):"]
+        for i, g in enumerate(groups, 1):
+            lines.append(f"\nGroup {i} ({len(g)} members):")
+            for name in g:
+                lines.append(f"  • {name}")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class RubricTool(BaseTool):
+    def execute(self, params):
+        assignment = params.get("assignment", params.get("title", "Assignment"))
+        criteria_str = params.get("criteria", params.get("items", ""))
+        levels = int(params.get("levels", 4))
+        if not criteria_str:
+            return {"success": False, "result": "Provide comma-separated criteria (e.g., Content, Clarity, Research)"}
+        criteria = [c.strip() for c in criteria_str.split(",") if c.strip()]
+        level_names = {4: ["Below", "Developing", "Proficient", "Exemplary"],
+                       3: ["Developing", "Proficient", "Exemplary"],
+                       5: ["Beginning", "Developing", "Proficient", "Advanced", "Exemplary"]}
+        level_labels = level_names.get(levels, level_names[4])
+        max_score = levels
+        lines = [f"Grading Rubric: {assignment}", "=" * 40, f"Scale: {levels} levels (1-{levels})", ""]
+        for c in criteria:
+            lines.append(f"\n{c} (Weight: {100 // len(criteria)}%):")
+            for i, lbl in enumerate(level_labels, 1):
+                lines.append(f"  {i} - {lbl}: {random.choice([
+                    f"Minimal {c.lower()}",
+                    f"Basic {c.lower()}",
+                    f"Good {c.lower()}",
+                    f"Excellent {c.lower()}",
+                    f"Outstanding {c.lower()}",
+                ][:levels - i + 1])}")
+        lines.append(f"\nTotal possible: {len(criteria)} × {max_score} = {len(criteria) * max_score} pts")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class SyllabusTool(BaseTool):
+    def execute(self, params):
+        course = params.get("course", params.get("title", "Course"))
+        weeks = min(int(params.get("weeks", params.get("duration", 16))), 20)
+        topics_str = params.get("topics", "")
+        topics = [t.strip() for t in topics_str.split(",") if t.strip()] if topics_str else []
+        lines = [f"Syllabus: {course}", "=" * 40, f"Duration: {weeks} weeks", ""]
+        lines.append("Required Materials:")
+        lines.append("  • Textbook (TBD)")
+        lines.append("  • Notebook and writing materials")
+        lines.append("  • Access to course website")
+        lines.append("\nGrading Breakdown:")
+        lines.append("  • Participation: 10%")
+        lines.append("  • Homework/Assignments: 30%")
+        lines.append("  • Midterm Exam: 25%")
+        lines.append("  • Final Exam/Project: 35%")
+        lines.append("\nCourse Schedule:")
+        for w in range(1, weeks + 1):
+            topic = topics[w - 1] if w <= len(topics) else f"Topic {w}"
+            lines.append(f"\nWeek {w}: {topic}")
+            lines.append(f"  • Reading assignment")
+            lines.append(f"  • {random.choice(['Homework due', 'Quiz', 'Lab exercise', 'Discussion post'])}")
+        lines.append("\nPolicies:")
+        lines.append("  • Late work: 10% penalty per day")
+        lines.append("  • Academic integrity: All work must be your own")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class PracticeProblemTool(BaseTool):
+    def execute(self, params):
+        subject = params.get("subject", params.get("topic", "math")).lower()
+        count = min(int(params.get("count", 3)), 10)
+        difficulty = params.get("difficulty", "medium")
+        problems = []
+        if "math" in subject or "algebra" in subject:
+            for i in range(count):
+                a, b = random.randint(2, 12), random.randint(2, 12)
+                ops = [("+", a + b), ("-", max(a, b) - min(a, b)),
+                       ("×", a * b)]
+                if difficulty == "hard":
+                    ops.append(("÷", a * b // max(b, 1) if a * b % max(b, 1) == 0 else "fraction"))
+                op, ans = random.choice(ops)
+                problems.append(f"{i+1}. {max(a,b)} {op} {min(a,b)} = ?  [Answer: {ans}]")
+        elif "physics" in subject:
+            for i in range(count):
+                m, a_num = random.randint(2, 20), random.randint(1, 10)
+                problems.append(f"{i+1}. F = ma: mass={m}kg, a={a_num}m/s², F=?  [Answer: {m*a_num}N]")
+        elif "chem" in subject:
+            for i in range(count):
+                problems.append(f"{i+1}. Balance: H₂ + O₂ → H₂O  [Answer: 2H₂ + O₂ → 2H₂O]")
+        else:
+            for i in range(count):
+                problems.append(f"{i+1}. Describe a key concept in {subject}.")
+        return {"success": True, "result": f"Practice Problems ({subject}, {difficulty}):\n" + "\n".join(problems)}
+
+
+class ScienceFactTool(BaseTool):
+    _FACTS = [
+        "Water expands when it freezes, which is why ice floats.",
+        "Light travels at about 299,792,458 m/s in a vacuum.",
+        "The human body contains about 60% water.",
+        "DNA was first discovered in 1869 by Friedrich Miescher.",
+        "The speed of sound is about 343 m/s at sea level.",
+        "A single lightning bolt contains enough energy to toast 100,000 slices of bread.",
+        "Honey never spoils — archaeologists found 3000-year-old edible honey in Egyptian tombs.",
+        "Octopuses have three hearts and blue blood.",
+        "Bananas are technically berries, but strawberries aren't.",
+        "The periodic table has 118 confirmed elements.",
+        "Sound travels 4.3× faster in water than in air.",
+        "A day on Venus is longer than its year.",
+        "The human brain generates enough electricity to power a small LED.",
+        "There are more trees on Earth than stars in the Milky Way (~3 trillion).",
+        "The Great Red Spot on Jupiter is a storm larger than Earth.",
+        "Oxygen makes up about 21% of Earth's atmosphere.",
+        "A bolt of lightning is 5× hotter than the surface of the sun.",
+        "The Earth's core is about as hot as the sun's surface (~5500°C).",
+        "Fingernails grow about 3.5 mm per month.",
+        "The heart beats about 100,000 times per day.",
+    ]
+
+    def execute(self, params):
+        action = params.get("action", "random")
+        topic = params.get("topic", "").strip().lower()
+        if action == "random":
+            return {"success": True, "result": f"🔬 {random.choice(self._FACTS)}"}
+        elif action == "list":
+            lines = [f"Science Facts ({len(self._FACTS)}):"]
+            for i, f in enumerate(self._FACTS, 1):
+                lines.append(f"{i}. {f}")
+            return {"success": True, "result": "\n".join(lines)}
+        elif action == "search":
+            results = [f for f in self._FACTS if topic in f.lower()]
+            if results:
+                return {"success": True, "result": "🔬 " + results[0]}
+            return {"success": False, "result": "No matching facts"}
+        return {"success": False, "result": "Actions: random, list, search"}
+
+
+class StudyPlanTool(BaseTool):
+    def execute(self, params):
+        subject = params.get("subject", params.get("topic", "a subject"))
+        days = min(int(params.get("days", 7)), 30)
+        hours = min(float(params.get("hours", params.get("per_day", 2))), 12)
+        lines = [f"Study Plan: {subject.title()}", f"Duration: {days} days, {hours}h/day",
+                 "=" * 40, "Tips:", "  • Review material within 24 hours of learning",
+                 "  • Use active recall (quiz yourself, don't just re-read)",
+                 "  • Space repetitions across multiple days",
+                 "  • Take a 5-min break every 25 minutes", ""]
+        topics = [f"Introduction to {subject}", f"Core Concepts of {subject}",
+                  f"Intermediate {subject} Topics", f"Advanced {subject} Concepts",
+                  f"Practical Applications", f"Review & Practice", f"Assessment"]
+        for day in range(1, days + 1):
+            topic = topics[(day - 1) % len(topics)]
+            r = random.random()
+            if r < 0.4:
+                activity = f"Study: {topic}"
+            elif r < 0.7:
+                activity = f"Practice problems on {topic}"
+            elif r < 0.85:
+                activity = f"Review previous material ({random.choice(topics[:max(day-1,1)])})"
+            else:
+                activity = "Take a practice quiz"
+            lines.append(f"Day {day:2d}: {activity} ({hours:.1f}h)")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class NoteOrganizerTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "add")
+        path = os.path.join(_STUDY_DIR, "notebook.json")
+        try:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    notebook = json.load(f)
+            else:
+                notebook = {"subjects": {}, "notes": []}
+            if action == "add":
+                subject = params.get("subject", params.get("class", "General")).strip()
+                title = params.get("title", "Untitled").strip()
+                content_note = params.get("content", params.get("notes", "")).strip()
+                tags_str = params.get("tags", "")
+                tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+                if not content_note:
+                    return {"success": False, "result": "Provide note content"}
+                note = {
+                    "id": str(time.time()),
+                    "subject": subject,
+                    "title": title,
+                    "content": content_note[:2000],
+                    "tags": tags,
+                    "created": time.time(),
+                }
+                notebook["notes"].append(note)
+                if subject not in notebook["subjects"]:
+                    notebook["subjects"][subject] = {"count": 0, "created": time.time()}
+                notebook["subjects"][subject]["count"] += 1
+                with open(path, "w") as f:
+                    json.dump(notebook, f)
+                return {"success": True, "result": f"Note added: {title} ({subject})"}
+            elif action == "list":
+                subject = params.get("subject", "")
+                pool = [n for n in notebook["notes"] if not subject or n.get("subject") == subject]
+                if not pool:
+                    return {"success": True, "result": "No notes found"}
+                lines = [f"Notes ({len(pool)}):"]
+                for n in sorted(pool, key=lambda x: x.get("created", 0), reverse=True)[:20]:
+                    lines.append(f"  • [{n.get('subject','General')}] {n.get('title','Untitled')}")
+                return {"success": True, "result": "\n".join(lines)}
+            elif action == "search":
+                query = params.get("query", "").strip().lower()
+                if not query:
+                    return {"success": False, "result": "Provide a search query"}
+                matches = [n for n in notebook["notes"] if query in n.get("content", "").lower()
+                           or query in n.get("title", "").lower()
+                           or query in n.get("subject", "").lower()]
+                if not matches:
+                    return {"success": True, "result": "No matches"}
+                lines = [f"Found {len(matches)} notes:"]
+                for n in matches[:10]:
+                    lines.append(f"  • [{n.get('subject','General')}] {n.get('title','Untitled')}")
+                return {"success": True, "result": "\n".join(lines)}
+            elif action == "subjects":
+                lines = [f"Subjects ({len(notebook['subjects'])}):"]
+                for s, d in sorted(notebook["subjects"].items()):
+                    lines.append(f"  • {s} ({d['count']} notes)")
+                return {"success": True, "result": "\n".join(lines)}
+            return {"success": False, "result": "Actions: add, list, search, subjects"}
+        except Exception as e:
+            return {"success": False, "result": f"Note error: {e}"}
+
+
 def create_default_registry():
     registry = ToolRegistry()
     registry.register("web_search", WebSearchTool())
@@ -3516,4 +5001,38 @@ def create_default_registry():
     registry.register("counter", CounterTool())
     registry.register("progress", ProgressTool())
     registry.register("color_picker", ColorPickerTool())
+    # Student & Teacher Tools (33)
+    registry.register("flashcard", FlashcardTool())
+    registry.register("quiz", QuizTool())
+    registry.register("study_set", StudySetTool())
+    registry.register("grade_calc", GradeCalcTool())
+    registry.register("gpa", GPATool())
+    registry.register("assignment", AssignmentTool())
+    registry.register("study_timer", StudyTimerTool())
+    registry.register("attendance", AttendanceTool())
+    registry.register("essay_outline", EssayOutlineTool())
+    registry.register("citation", CitationTool())
+    registry.register("thesaurus", ThesaurusTool())
+    registry.register("statistics", StatisticsTool())
+    registry.register("prime", PrimeTool())
+    registry.register("matrix", MatrixTool())
+    registry.register("periodic_table", PeriodicTableTool())
+    registry.register("physics_ref", PhysicsRefTool())
+    registry.register("formula", FormulaTool())
+    registry.register("doi_lookup", DOILookupTool())
+    registry.register("arxiv", ArxivTool())
+    registry.register("vocab", VocabTool())
+    registry.register("mnemonic", MnemonicTool())
+    registry.register("note_summarize", NoteSummarizeTool())
+    registry.register("conjugation", ConjugationTool())
+    registry.register("spell_check", SpellCheckTool())
+    registry.register("group_picker", GroupPickerTool())
+    registry.register("rubric", RubricTool())
+    registry.register("syllabus", SyllabusTool())
+    registry.register("practice_problem", PracticeProblemTool())
+    registry.register("science_fact", ScienceFactTool())
+    registry.register("study_plan", StudyPlanTool())
+    registry.register("note_organizer", NoteOrganizerTool())
+    registry.register("bibliography", BibliographyTool())
+    registry.register("equation_solve", EquationSolveTool())
     return registry
