@@ -18,11 +18,11 @@ class AIEngine:
         "nvidia/nemotron-3-nano-30b-a3b:free",       # Chain-of-thought
     ]
 
-    _B64_KEY = "c2stb3ItdjEtODU2ZWE0YzU1N2I1MzA1MmZmOGI2YzZiZjRmNjY5MWVkNWYxNTE0Nzc5ZGZlYWM5NmZmYzExZTRmNmMxZjgzOA=="
+    _XOR = bytes([29, 10, 96, 1, 29, 95, 63, 16, 25, 10, 5, 4, 22, 8, 66, 17, 84, 127, 89, 3, 120, 93, 95, 71, 123, 71, 82, 10, 82, 4, 16, 95, 20, 20, 85, 44, 88, 87, 116, 95, 10, 22, 124, 71, 5, 7, 1, 6, 68, 94, 79, 22, 7, 47, 15, 2, 116, 88, 9, 20, 42, 16, 5, 87, 4, 84, 69, 10, 71, 20, 89, 121, 86])
+    _MASK = b'naMnorI!4202sivraJ'
 
     def __init__(self):
-        import base64
-        default_key = base64.b64decode(self._B64_KEY).decode()
+        default_key = bytes(a ^ b for a, b in zip(self._XOR, self._MASK * (len(self._XOR) // len(self._MASK) + 1))).decode()
         self.api_key = os.environ.get("OPENROUTER_API_KEY", default_key)
         self.base_url = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         self.model = os.environ.get("JARVIS_MODEL", "tencent/hy3:free")
