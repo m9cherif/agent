@@ -17,6 +17,9 @@ import threading
 import hashlib
 import hmac
 import mimetypes
+import textwrap
+import base64
+import urllib.error
 
 _XOR = bytes([29, 10, 96, 1, 29, 95, 63, 16, 25, 10, 5, 4, 22, 8, 66, 17, 84, 127, 89, 3, 120, 93, 95, 71, 123, 71, 82, 10, 82, 4, 16, 95, 20, 20, 85, 44, 88, 87, 116, 95, 10, 22, 124, 71, 5, 7, 1, 6, 68, 94, 79, 22, 7, 47, 15, 2, 116, 88, 9, 20, 42, 16, 5, 87, 4, 84, 69, 10, 71, 20, 89, 121, 86])
 _MASK = b'naMnorI!4202sivraJ'
@@ -2406,6 +2409,699 @@ class IdleTool(BaseTool):
         return {"success": True, "result": " | ".join(results)}
 
 
+class PublicIPTool(BaseTool):
+    def execute(self, params):
+        try:
+            import urllib.request
+            with urllib.request.urlopen("https://api.ipify.org?format=json", timeout=10) as r:
+                data = json.loads(r.read())
+            return {"success": True, "result": data.get("ip", "unknown")}
+        except Exception as e:
+            return {"success": False, "result": f"IP error: {e}"}
+
+
+class PingTool(BaseTool):
+    def execute(self, params):
+        host = params.get("host", "8.8.8.8")
+        count = params.get("count", 4)
+        try:
+            param = "-n" if sys.platform == "win32" else "-c"
+            r = subprocess.run(["ping", param, str(count), host], capture_output=True, text=True, timeout=30)
+            out = r.stdout or r.stderr
+            lines = [l.strip() for l in out.split("\n") if l.strip()]
+            return {"success": True, "result": "; ".join(lines[-6:-1]) if len(lines) > 1 else out[:500]}
+        except Exception as e:
+            return {"success": False, "result": f"Ping error: {e}"}
+
+
+class DNSTool(BaseTool):
+    def execute(self, params):
+        host = params.get("host", "")
+        if not host:
+            return {"success": False, "result": "Host required"}
+        try:
+            import socket
+            ip = socket.gethostbyname(host)
+            try:
+                hostname, _, _ = socket.gethostbyaddr(ip)
+                return {"success": True, "result": f"{host} → {ip} ({hostname})"}
+            except Exception:
+                return {"success": True, "result": f"{host} → {ip}"}
+        except Exception as e:
+            return {"success": False, "result": f"DNS error: {e}"}
+
+
+class HostInfoTool(BaseTool):
+    def execute(self, params):
+        target = params.get("target", "")
+        if not target:
+            return {"success": False, "result": "Target required"}
+        results = []
+        try:
+            import socket
+            ip = socket.gethostbyname(target)
+            results.append(f"IP: {ip}")
+        except Exception:
+            pass
+        try:
+            import subprocess
+            r = subprocess.run(["curl", "-s", f"https://ipapi.co/{target}/json/"], capture_output=True, text=True, timeout=15)
+            if r.stdout:
+                data = json.loads(r.stdout)
+                org = data.get("org", "")
+                city = data.get("city", "")
+                country = data.get("country_name", "")
+                if city: results.append(f"Location: {city}, {country}")
+                if org: results.append(f"ISP: {org}")
+        except Exception:
+            pass
+        return {"success": True, "result": " | ".join(results) if results else "No info"}
+
+
+class TimestampTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "now")
+        try:
+            if action == "now":
+                return {"success": True, "result": str(int(time.time()))}
+            elif action == "from_iso":
+                iso = params.get("iso", "")
+                ts = int(datetime.datetime.fromisoformat(iso).timestamp())
+                return {"success": True, "result": str(ts)}
+            elif action == "to_iso":
+                ts = float(params.get("timestamp", "0"))
+                dt = datetime.datetime.fromtimestamp(ts)
+                return {"success": True, "result": dt.isoformat()}
+            return {"success": False, "result": "Actions: now, from_iso, to_iso"}
+        except Exception as e:
+            return {"success": False, "result": f"Timestamp error: {e}"}
+
+
+class TimezoneTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "list")
+        try:
+            import zoneinfo
+            if action == "list":
+                zones = sorted(zoneinfo.available_timezones())
+                return {"success": True, "result": "Available timezones: " + ", ".join(zones[:30]) + ("..." if len(zones) > 30 else "")}
+            elif action == "convert":
+                tz_name = params.get("timezone", "UTC")
+                tz = zoneinfo.ZoneInfo(tz_name)
+                now = datetime.datetime.now(tz)
+                return {"success": True, "result": f"Time in {tz_name}: {now.strftime('%Y-%m-%d %H:%M:%S %Z')}"}
+            return {"success": False, "result": "Actions: list, convert"}
+        except Exception as e:
+            return {"success": False, "result": f"Timezone error: {e}"}
+
+
+class DateCalcTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "diff")
+        try:
+            if action == "diff":
+                d1 = datetime.datetime.fromisoformat(params.get("date1", ""))
+                d2 = datetime.datetime.fromisoformat(params.get("date2", ""))
+                diff = abs((d2 - d1).days)
+                return {"success": True, "result": f"Difference: {diff} days"}
+            elif action == "add":
+                d = datetime.datetime.fromisoformat(params.get("date", datetime.datetime.now().isoformat()))
+                days = int(params.get("days", 0))
+                result = d + datetime.timedelta(days=days)
+                return {"success": True, "result": result.strftime("%Y-%m-%d")}
+            elif action == "weekday":
+                d = datetime.datetime.fromisoformat(params.get("date", ""))
+                return {"success": True, "result": d.strftime("%A")}
+            return {"success": False, "result": "Actions: diff, add, weekday"}
+        except Exception as e:
+            return {"success": False, "result": f"Date error: {e}"}
+
+
+class TextTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "upper")
+        text = params.get("text", "")
+        if not text:
+            return {"success": False, "result": "Text required"}
+        try:
+            if action == "upper":
+                return {"success": True, "result": text.upper()}
+            elif action == "lower":
+                return {"success": True, "result": text.lower()}
+            elif action == "title":
+                return {"success": True, "result": text.title()}
+            elif action == "capitalize":
+                return {"success": True, "result": text.capitalize()}
+            elif action == "swapcase":
+                return {"success": True, "result": text.swapcase()}
+            elif action == "reverse":
+                return {"success": True, "result": text[::-1]}
+            elif action == "trim":
+                return {"success": True, "result": text.strip()}
+            elif action == "length":
+                return {"success": True, "result": f"{len(text)} chars, {len(text.split())} words, {text.count(chr(10))+1} lines"}
+            elif action == "wrap":
+                width = int(params.get("width", 80))
+                return {"success": True, "result": textwrap.fill(text, width)}
+            elif action == "strip_lines":
+                lines = [l.strip() for l in text.split("\n") if l.strip()]
+                return {"success": True, "result": "\n".join(lines)}
+            return {"success": False, "result": "Actions: upper, lower, title, capitalize, swapcase, reverse, trim, length, wrap, strip_lines"}
+        except Exception as e:
+            return {"success": False, "result": f"Text error: {e}"}
+
+
+class DiffTool(BaseTool):
+    def execute(self, params):
+        text1 = params.get("text1", "")
+        text2 = params.get("text2", "")
+        if not text1 or not text2:
+            return {"success": False, "result": "Need text1 and text2"}
+        try:
+            import difflib
+            lines1 = text1.splitlines(keepends=True)
+            lines2 = text2.splitlines(keepends=True)
+            diff = list(difflib.unified_diff(lines1, lines2, n=2))
+            result = "".join(diff[:100])
+            return {"success": True, "result": result or "No differences"}
+        except Exception as e:
+            return {"success": False, "result": f"Diff error: {e}"}
+
+
+class SortTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "alpha")
+        text = params.get("text", "")
+        if not text:
+            return {"success": False, "result": "Text required"}
+        try:
+            lines = text.split("\n")
+            if action in ("alpha", "asc"):
+                lines.sort()
+            elif action == "desc":
+                lines.sort(reverse=True)
+            elif action == "numeric":
+                nums = [float(l.strip()) for l in lines if l.strip()]
+                nums.sort()
+                return {"success": True, "result": "\n".join(str(n) for n in nums)}
+            elif action == "length":
+                lines.sort(key=len)
+            elif action in ("unique", "uniq"):
+                seen = []
+                [seen.append(l) for l in lines if l not in seen]
+                lines = seen
+            elif action == "shuffle":
+                random.shuffle(lines)
+            elif action == "reverse":
+                lines.reverse()
+            return {"success": True, "result": "\n".join(lines)}
+        except Exception as e:
+            return {"success": False, "result": f"Sort error: {e}"}
+
+
+class RegexTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "find")
+        pattern = params.get("pattern", "")
+        text = params.get("text", "")
+        if not pattern or not text:
+            return {"success": False, "result": "Need pattern and text"}
+        try:
+            if action == "find":
+                matches = re.findall(pattern, text)
+                return {"success": True, "result": f"Found {len(matches)}: " + ", ".join(str(m) for m in matches[:50])}
+            elif action == "match":
+                m = re.match(pattern, text)
+                return {"success": True, "result": f"Match: {m.group()}" if m else "No match"}
+            elif action == "search":
+                m = re.search(pattern, text)
+                return {"success": True, "result": f"Found: {m.group()}" if m else "Not found"}
+            elif action == "replace":
+                replacement = params.get("replacement", "")
+                result = re.sub(pattern, replacement, text)
+                return {"success": True, "result": result[:2000]}
+            elif action == "split":
+                parts = re.split(pattern, text)
+                return {"success": True, "result": "\n".join(parts[:50])}
+            return {"success": False, "result": "Actions: find, match, search, replace, split"}
+        except Exception as e:
+            return {"success": False, "result": f"Regex error: {e}"}
+
+
+class UUIDTool(BaseTool):
+    def execute(self, params):
+        import uuid
+        count = min(int(params.get("count", 1)), 50)
+        results = [str(uuid.uuid4()) for _ in range(count)]
+        return {"success": True, "result": "\n".join(results)}
+
+
+class Base64Tool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "encode")
+        text = params.get("text", "")
+        if not text:
+            return {"success": False, "result": "Text required"}
+        try:
+            if action == "encode":
+                return {"success": True, "result": base64.b64encode(text.encode()).decode()}
+            elif action == "decode":
+                return {"success": True, "result": base64.b64decode(text).decode()}
+            return {"success": False, "result": "Actions: encode, decode"}
+        except Exception as e:
+            return {"success": False, "result": f"Base64 error: {e}"}
+
+
+class ConfirmTool(BaseTool):
+    def execute(self, params):
+        message = params.get("message", "Are you sure?")
+        default = params.get("default", "yes")
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+            root = tk.Tk()
+            root.withdraw()
+            result = messagebox.askyesno("JARVIS", message)
+            root.destroy()
+            return {"success": True, "result": "yes" if result else "no"}
+        except Exception:
+            return {"success": True, "result": default}
+
+
+class PromptTool(BaseTool):
+    def execute(self, params):
+        message = params.get("message", "Enter text:")
+        default = params.get("default", "")
+        try:
+            import tkinter as tk
+            from tkinter import simpledialog
+            root = tk.Tk()
+            root.withdraw()
+            result = simpledialog.askstring("JARVIS", message, initialvalue=default)
+            root.destroy()
+            return {"success": True, "result": result or default}
+        except Exception as e:
+            return {"success": False, "result": f"Prompt error: {e}"}
+
+
+class ChooseTool(BaseTool):
+    def execute(self, params):
+        message = params.get("message", "Choose:")
+        options = params.get("options", [])
+        if isinstance(options, str):
+            options = [o.strip() for o in options.split(",")]
+        if not options:
+            return {"success": False, "result": "No options provided"}
+        try:
+            import tkinter as tk
+            from tkinter import simpledialog
+            root = tk.Tk()
+            root.withdraw()
+            result = simpledialog.askstring("JARVIS", f"{message}\nOptions: {', '.join(options)}", initialvalue=options[0])
+            root.destroy()
+            return {"success": True, "result": result or options[0]}
+        except Exception:
+            return {"success": True, "result": options[0]}
+
+
+class BeepTool(BaseTool):
+    def execute(self, params):
+        freq = int(params.get("frequency", params.get("freq", 880)))
+        duration = int(params.get("duration", 200))
+        try:
+            import winsound
+            winsound.Beep(freq, duration)
+            return {"success": True, "result": f"Beep at {freq}Hz for {duration}ms"}
+        except ImportError:
+            try:
+                print(f"\a", end="", flush=True)
+                return {"success": True, "result": "Beep sent"}
+            except Exception:
+                return {"success": False, "result": "Beep not available"}
+
+
+class SleepTool(BaseTool):
+    def execute(self, params):
+        seconds = float(params.get("seconds", params.get("duration", 1)))
+        if seconds > 300:
+            return {"success": False, "result": "Max 300 seconds"}
+        time.sleep(seconds)
+        return {"success": True, "result": f"Slept for {seconds}s"}
+
+
+class AlarmTool(BaseTool):
+    def __init__(self):
+        self._alarms = []
+
+    def execute(self, params):
+        action = params.get("action", "set")
+        try:
+            if action == "set":
+                seconds = int(params.get("seconds", 10))
+                def _alarm(sec):
+                    time.sleep(sec)
+                    try:
+                        import winsound
+                        for _ in range(5):
+                            winsound.Beep(880, 200)
+                            time.sleep(0.2)
+                    except Exception:
+                        print("\a" * 5, end="", flush=True)
+                threading.Thread(target=_alarm, args=(seconds,), daemon=True).start()
+                return {"success": True, "result": f"Alarm set for {seconds}s"}
+            return {"success": False, "result": "Actions: set"}
+        except Exception as e:
+            return {"success": False, "result": f"Alarm error: {e}"}
+
+
+class StopwatchTool(BaseTool):
+    def __init__(self):
+        self._start = 0
+        self._running = False
+
+    def execute(self, params):
+        action = params.get("action", "start")
+        try:
+            if action == "start":
+                self._start = time.time()
+                self._running = True
+                return {"success": True, "result": "Stopwatch started"}
+            elif action == "stop":
+                if not self._running:
+                    return {"success": True, "result": "Not running"}
+                elapsed = time.time() - self._start
+                self._running = False
+                return {"success": True, "result": f"Stopped: {elapsed:.2f}s"}
+            elif action == "lap":
+                if not self._running:
+                    return {"success": True, "result": "Not running"}
+                elapsed = time.time() - self._start
+                return {"success": True, "result": f"Lap: {elapsed:.2f}s"}
+            elif action == "reset":
+                self._start = 0
+                self._running = False
+                return {"success": True, "result": "Stopwatch reset"}
+            return {"success": False, "result": "Actions: start, stop, lap, reset"}
+        except Exception as e:
+            return {"success": False, "result": f"Stopwatch error: {e}"}
+
+
+class FileInfoTool(BaseTool):
+    def execute(self, params):
+        path = params.get("path", "")
+        if not path:
+            return {"success": False, "result": "Path required"}
+        try:
+            st = os.stat(path)
+            info = f"Size: {st.st_size:,} bytes"
+            info += f"\nModified: {datetime.datetime.fromtimestamp(st.st_mtime)}"
+            info += f"\nCreated: {datetime.datetime.fromtimestamp(st.st_ctime)}"
+            info += f"\nPermissions: {oct(st.st_mode)[-3:]}"
+            if os.path.isdir(path):
+                count = len(os.listdir(path))
+                info += f"\nDirectory with {count} items"
+            else:
+                ext = os.path.splitext(path)[1]
+                info += f"\nType: {ext.upper() if ext else 'Unknown'}"
+            return {"success": True, "result": info}
+        except Exception as e:
+            return {"success": False, "result": f"File info error: {e}"}
+
+
+class DirListTool(BaseTool):
+    def execute(self, params):
+        path = params.get("path", ".")
+        pattern = params.get("pattern", "*")
+        max_items = int(params.get("max", 200))
+        try:
+            items = sorted(os.listdir(path))
+            if pattern != "*":
+                import fnmatch
+                items = [i for i in items if fnmatch.fnmatch(i, pattern)]
+            items = items[:max_items]
+            dirs = [i + "/" for i in items if os.path.isdir(os.path.join(path, i))]
+            files = [i for i in items if not os.path.isdir(os.path.join(path, i))]
+            result = f"Directory: {os.path.abspath(path)}\n"
+            if dirs:
+                result += "Dirs: " + ", ".join(dirs) + "\n"
+            if files:
+                result += "Files: " + ", ".join(files)
+            return {"success": True, "result": result or "(empty)"}
+        except Exception as e:
+            return {"success": False, "result": f"Dir list error: {e}"}
+
+
+class ImageInfoTool(BaseTool):
+    def execute(self, params):
+        path = params.get("path", "")
+        if not path:
+            return {"success": False, "result": "Path required"}
+        try:
+            from PIL import Image
+            img = Image.open(path)
+            info = f"Format: {img.format}"
+            info += f"\nSize: {img.size[0]}x{img.size[1]}px"
+            info += f"\nMode: {img.mode}"
+            info += f"\nFile: {os.path.getsize(path):,} bytes"
+            if hasattr(img, 'info') and img.info:
+                exif = {k: str(v)[:80] for k, v in img.info.items()}
+                info += f"\nMetadata: {json.dumps(exif, ensure_ascii=False)}"
+            return {"success": True, "result": info}
+        except Exception as e:
+            return {"success": False, "result": f"Image error: {e}"}
+
+
+class FactTool(BaseTool):
+    def execute(self, params):
+        try:
+            import urllib.request
+            with urllib.request.urlopen("https://uselessfacts.jsph.pl/api/v2/facts/random", timeout=10) as r:
+                data = json.loads(r.read())
+            return {"success": True, "result": data.get("text", "No fact found")}
+        except Exception:
+            try:
+                facts = [
+                    "A day on Venus is longer than a year on Venus.",
+                    "Honey never spoils. Archaeologists found 3000-year-old honey in Egyptian tombs.",
+                    "Octopuses have three hearts and blue blood.",
+                    "Bananas are berries, but strawberries aren't.",
+                    "A group of flamingos is called a 'flamboyance'.",
+                    "The Eiffel Tower can be 15 cm taller during summer.",
+                    "Wombat poop is cube-shaped.",
+                    "The human nose can remember 50,000 different scents.",
+                    "There are more trees on Earth than stars in the Milky Way.",
+                    "The speed of light is about 299,792,458 m/s.",
+                ]
+                return {"success": True, "result": random.choice(facts)}
+            except Exception as e:
+                return {"success": False, "result": f"Fact error: {e}"}
+
+
+class LyricTool(BaseTool):
+    def execute(self, params):
+        artist = params.get("artist", "")
+        title = params.get("title", "")
+        if not artist and not title:
+            return {"success": False, "result": "Need artist or title"}
+        try:
+            q = urllib.parse.quote(f"{artist} {title}")
+            with urllib.request.urlopen(f"https://api.lyrics.ovh/v1/{urllib.parse.quote(artist)}/{urllib.parse.quote(title)}", timeout=10) as r:
+                data = json.loads(r.read())
+            lyrics = data.get("lyrics", "")
+            return {"success": True, "result": lyrics[:2000]}
+        except Exception:
+            return {"success": False, "result": "Lyrics not found"}
+
+
+class HNReaderTool(BaseTool):
+    def execute(self, params):
+        category = params.get("category", "top")
+        count = min(int(params.get("count", 10)), 30)
+        try:
+            import urllib.request
+            ids_url = f"https://hacker-news.firebaseio.com/v0/{category}stories.json"
+            with urllib.request.urlopen(ids_url, timeout=10) as r:
+                ids = json.loads(r.read())[:count]
+            stories = []
+            for sid in ids:
+                with urllib.request.urlopen(f"https://hacker-news.firebaseio.com/v0/item/{sid}.json", timeout=10) as r:
+                    item = json.loads(r.read())
+                stories.append(f"[{item.get('score', 0)}] {item.get('title', '')} ({item.get('url', 'no url')[:60]})")
+            return {"success": True, "result": f"HN {category} stories:\n" + "\n".join(stories)}
+        except Exception as e:
+            return {"success": False, "result": f"HN error: {e}"}
+
+
+class RedditTool(BaseTool):
+    def execute(self, params):
+        subreddit = params.get("subreddit", "programming")
+        category = params.get("category", "hot")
+        count = min(int(params.get("count", 10)), 30)
+        try:
+            import urllib.request
+            url = f"https://www.reddit.com/r/{subreddit}/{category}.json?limit={count}"
+            req = urllib.request.Request(url, headers={"User-Agent": "JarvisAssistant/2.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read())
+            posts = data.get("data", {}).get("children", [])
+            lines = []
+            for p in posts:
+                d = p.get("data", {})
+                lines.append(f"[{d.get('score', 0)}] {d.get('title', '')}")
+            return {"success": True, "result": f"r/{subreddit} {category}:\n" + "\n".join(lines)}
+        except Exception as e:
+            return {"success": False, "result": f"Reddit error: {e}"}
+
+
+class WikipediaTool(BaseTool):
+    def execute(self, params):
+        query = params.get("query", "")
+        if not query:
+            return {"success": False, "result": "Query required"}
+        try:
+            import urllib.request, urllib.parse
+            url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(query)
+            with urllib.request.urlopen(url, timeout=10) as r:
+                data = json.loads(r.read())
+            extract = data.get("extract", "")
+            if not extract:
+                return {"success": True, "result": "No summary available"}
+            return {"success": True, "result": f"**{data.get('title', query)}**\n{extract[:2000]}"}
+        except urllib.error.HTTPError:
+            return {"success": False, "result": f"No Wikipedia page found for '{query}'"}
+        except Exception as e:
+            return {"success": False, "result": f"Wikipedia error: {e}"}
+
+
+class WeatherForecastTool(BaseTool):
+    def execute(self, params):
+        city = params.get("city", "")
+        days = min(int(params.get("days", 3)), 7)
+        if not city:
+            return {"success": False, "result": "City required"}
+        try:
+            import urllib.request, urllib.parse
+            geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={urllib.parse.quote(city)}&count=1"
+            with urllib.request.urlopen(geo_url, timeout=10) as r:
+                geo = json.loads(r.read())
+            if not geo.get("results"):
+                return {"success": False, "result": f"City '{city}' not found"}
+            loc = geo["results"][0]
+            lat, lon = loc["latitude"], loc["longitude"]
+            w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weathercode&timezone=auto&forecast_days={days}"
+            with urllib.request.urlopen(w_url, timeout=10) as r:
+                w = json.loads(r.read())
+            daily = w.get("daily", {})
+            dates = daily.get("time", [])
+            tmax = daily.get("temperature_2m_max", [])
+            tmin = daily.get("temperature_2m_min", [])
+            precip = daily.get("precipitation_sum", [])
+            codes = daily.get("weathercode", [])
+            weather_names = {0:"Clear",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Foggy",51:"Drizzle",61:"Rain",71:"Snow",80:"Showers",95:"Thunderstorm"}
+            result = f"Forecast for {city}:\n"
+            for i in range(len(dates)):
+                wc = weather_names.get(codes[i] if i < len(codes) else 0, "Unknown")
+                result += f"  {dates[i]}: {tmin[i]}–{tmax[i]}°C, {wc}, {precip[i]}mm rain\n"
+            return {"success": True, "result": result}
+        except Exception as e:
+            return {"success": False, "result": f"Forecast error: {e}"}
+
+
+class CurrencyTool(BaseTool):
+    def execute(self, params):
+        amount = float(params.get("amount", 1))
+        from_cur = params.get("from", params.get("from_currency", "USD")).upper()
+        to_cur = params.get("to", params.get("to_currency", "EUR")).upper()
+        try:
+            import urllib.request
+            with urllib.request.urlopen(f"https://api.frankfurter.app/latest?from={from_cur}&to={to_cur}", timeout=10) as r:
+                data = json.loads(r.read())
+            rate = data.get("rates", {}).get(to_cur, 1)
+            converted = amount * rate
+            return {"success": True, "result": f"{amount} {from_cur} = {converted:.2f} {to_cur} (rate: {rate:.4f})"}
+        except Exception as e:
+            return {"success": False, "result": f"Currency error: {e}"}
+
+
+class StockTool(BaseTool):
+    def execute(self, params):
+        symbol = params.get("symbol", "").upper()
+        if not symbol:
+            return {"success": False, "result": "Symbol required (e.g. AAPL)"}
+        try:
+            import urllib.request
+            with urllib.request.urlopen(f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}", timeout=10) as r:
+                data = json.loads(r.read())
+            result = data.get("chart", {}).get("result", [{}])[0]
+            meta = result.get("meta", {})
+            price = meta.get("regularMarketPrice", meta.get("previousClose", "N/A"))
+            name = meta.get("exchangeName", "")
+            currency = meta.get("currency", "USD")
+            return {"success": True, "result": f"{symbol} ({name}): ${price} {currency}"}
+        except Exception as e:
+            return {"success": False, "result": f"Stock error: {e}"}
+
+
+class MovieTool(BaseTool):
+    def execute(self, params):
+        title = params.get("title", "")
+        if not title:
+            return {"success": False, "result": "Title required"}
+        try:
+            q = urllib.parse.quote(title)
+            with urllib.request.urlopen(f"https://www.omdbapi.com/?t={q}&apikey=2c9d2e0e", timeout=10) as r:
+                data = json.loads(r.read())
+            if data.get("Response") == "False":
+                return {"success": False, "result": data.get("Error", "Movie not found")}
+            return {"success": True, "result": f"**{data.get('Title')}** ({data.get('Year')})\nRating: {data.get('imdbRating')}/10\nGenre: {data.get('Genre')}\nDirector: {data.get('Director')}\nPlot: {data.get('Plot', '')[:500]}"}
+        except Exception as e:
+            return {"success": False, "result": f"Movie error: {e}"}
+
+
+class RecipeTool(BaseTool):
+    def execute(self, params):
+        query = params.get("query", "")
+        if not query:
+            return {"success": False, "result": "Query required"}
+        try:
+            q = urllib.parse.quote(query)
+            with urllib.request.urlopen(f"https://www.themealdb.com/api/json/v1/1/search.php?s={q}", timeout=10) as r:
+                data = json.loads(r.read())
+            meals = data.get("meals", [])
+            if not meals:
+                return {"success": False, "result": "No recipes found"}
+            meal = meals[0]
+            ingredients = []
+            for i in range(1, 21):
+                ing = meal.get(f"strIngredient{i}")
+                meas = meal.get(f"strMeasure{i}")
+                if ing and ing.strip():
+                    ingredients.append(f"{meas} {ing}".strip())
+            result = f"**{meal['strMeal']}** ({meal.get('strArea', '')} - {meal.get('strCategory', '')})\n"
+            result += f"Ingredients: {', '.join(ingredients[:15])}\n"
+            result += f"Instructions: {meal.get('strInstructions', '')[:500]}"
+            return {"success": True, "result": result}
+        except Exception as e:
+            return {"success": False, "result": f"Recipe error: {e}"}
+
+
+class RDJokeTool(BaseTool):
+    def execute(self, params):
+        try:
+            import urllib.request
+            with urllib.request.urlopen("https://official-joke-api.appspot.com/random_joke", timeout=10) as r:
+                data = json.loads(r.read())
+            return {"success": True, "result": f"{data.get('setup', '')} - {data.get('punchline', '')}"}
+        except Exception:
+            try:
+                import urllib.request
+                with urllib.request.urlopen("https://v2.jokeapi.dev/joke/Any?type=twopart", timeout=10) as r:
+                    data = json.loads(r.read())
+                return {"success": True, "result": f"{data.get('setup', '')} - {data.get('delivery', '')}"}
+            except Exception as e:
+                return {"success": False, "result": f"Joke error: {e}"}
+
+
 def create_default_registry():
     registry = ToolRegistry()
     registry.register("web_search", WebSearchTool())
@@ -2445,7 +3141,6 @@ def create_default_registry():
     registry.register("vision", VisionTool())
     registry.register("screen_watch", ScreenWatchTool())
     registry.register("input_control", InputControlTool())
-    # OpenCode-style tools
     registry.register("edit", EditTool())
     registry.register("grep", GrepTool())
     registry.register("glob", GlobTool())
@@ -2454,7 +3149,6 @@ def create_default_registry():
     registry.register("question", QuestionTool())
     registry.register("skill", SkillTool())
     registry.register("todowrite", TodoWriteTool())
-    # New tools
     registry.register("volume", VolumeControlTool())
     registry.register("media", MediaControlTool())
     registry.register("notification", NotificationTool())
@@ -2467,4 +3161,44 @@ def create_default_registry():
     registry.register("unit", UnitTool())
     registry.register("math_eval", MathEvalTool())
     registry.register("idle", IdleTool())
+    # Register existing unregistered tools
+    registry.register("email", EmailTool())
+    registry.register("calendar", CalendarTool())
+    registry.register("reminder", ReminderTool())
+    registry.register("timer", TimerTool())
+    # New tools batch
+    registry.register("public_ip", PublicIPTool())
+    registry.register("ping", PingTool())
+    registry.register("dns_lookup", DNSTool())
+    registry.register("host_info", HostInfoTool())
+    registry.register("timestamp", TimestampTool())
+    registry.register("timezone", TimezoneTool())
+    registry.register("date_calc", DateCalcTool())
+    registry.register("text", TextTool())
+    registry.register("diff", DiffTool())
+    registry.register("sort", SortTool())
+    registry.register("regex", RegexTool())
+    registry.register("uuid", UUIDTool())
+    registry.register("base64", Base64Tool())
+    registry.register("confirm", ConfirmTool())
+    registry.register("prompt", PromptTool())
+    registry.register("choose", ChooseTool())
+    registry.register("beep", BeepTool())
+    registry.register("sleep", SleepTool())
+    registry.register("alarm", AlarmTool())
+    registry.register("stopwatch", StopwatchTool())
+    registry.register("file_info", FileInfoTool())
+    registry.register("dir_list", DirListTool())
+    registry.register("image_info", ImageInfoTool())
+    registry.register("fact", FactTool())
+    registry.register("lyric", LyricTool())
+    registry.register("hn", HNReaderTool())
+    registry.register("reddit", RedditTool())
+    registry.register("wikipedia", WikipediaTool())
+    registry.register("forecast", WeatherForecastTool())
+    registry.register("currency", CurrencyTool())
+    registry.register("stock", StockTool())
+    registry.register("movie", MovieTool())
+    registry.register("recipe", RecipeTool())
+    registry.register("random_joke", RDJokeTool())
     return registry

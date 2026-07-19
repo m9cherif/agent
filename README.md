@@ -1,6 +1,6 @@
 # J.A.R.V.I.S
 
-> Fully autonomous AI desktop assistant with voice, vision, and 57+ tools.
+> Fully autonomous AI desktop assistant with voice, vision, and **95 tools**.
 
 ## 🚀 One-Command Setup
 
@@ -45,7 +45,7 @@ Get a free key at [openrouter.ai/keys](https://openrouter.ai/keys).
 - **Talk to it** — British male JARVIS voice, listens and responds
 - **Sees your screen** — Real-time vision, frame change detection
 - **Controls your PC** — Mouse, keyboard, windows, volume, media, files, browser
-- **57 tools** — web search, calculator, weather, notes, todo, clipboard, OCR, QR codes, translation, crypto prices, news, and more
+- **95 tools** — web search, calculator, weather, forecast, currency, stock, movie, recipe, email, calendar, timer, alarms, text manipulation, regex, diff, sort, UUID, base64, Hacker News, Reddit, Wikipedia, lyrics, facts, image info, ping, DNS, public IP, stopwatch, confirm/prompt dialogs, and more
 - **Iron Man HUD** — Animated eye with radar sweep, targeting reticle, data readouts
 
 ## Voice commands
