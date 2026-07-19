@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 import subprocess
 import ssl
 import urllib.request
@@ -176,6 +177,7 @@ class WeatherTool(BaseTool):
             req = urllib.request.Request(url, headers={"User-Agent": "curl/8.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = resp.read().decode().strip()
+            data = data.encode('ascii', 'replace').decode()
             return {"success": True, "result": f"Weather in {location}: {data}"}
         except Exception as e:
             return {"success": False, "result": f"Weather error: {e}"}
@@ -671,27 +673,23 @@ class NewsTool(BaseTool):
     def execute(self, params):
         topic = params.get("topic", params.get("query", ""))
         try:
-            # Use RSS-to-JSON via DuckDuckGo or similar free sources
-            query = topic if topic else "latest news"
-            url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_html=1&skip_disambig=1"
+            if topic:
+                url = f"https://newsapi.org/v2/everything?q={urllib.parse.quote(topic)}&pageSize=8&apiKey=94c8b3f8c2e0464f983a25c7ce749e0e"
+            else:
+                url = f"https://newsapi.org/v2/top-headlines?country=us&pageSize=8&apiKey=94c8b3f8c2e0464f983a25c7ce749e0e"
             req = urllib.request.Request(url, headers={"User-Agent": "Jarvis/2.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read())
-            results = []
-            heading = data.get("Heading", "")
-            abstract = data.get("Abstract", "") or data.get("AbstractText", "")
-            if heading and abstract:
-                results.append(f"• {heading}: {abstract[:200]}")
-            related = data.get("RelatedTopics", [])
-            for r in related[:5]:
-                if isinstance(r, dict):
-                    text = r.get("Text", r.get("Result", ""))
-                    text = re.sub(r'<[^>]+>', '', text)
-                    if text:
-                        results.append(f"• {text[:200]}")
-            if results:
-                return {"success": True, "result": (f"News about '{topic}':\n" if topic else "Top stories:\n") + "\n".join(results)}
-            return {"success": False, "result": "No news found. Try a different topic."}
+            articles = data.get("articles", [])
+            if not articles:
+                return {"success": False, "result": "No news found. Try a different topic."}
+            lines = []
+            for a in articles[:8]:
+                title = a.get("title", "")
+                source = a.get("source", {}).get("name", "")
+                if title:
+                    lines.append(f"• [{source}] {title[:150]}")
+            return {"success": True, "result": (f"News about '{topic}':\n" if topic else "Top headlines:\n") + "\n".join(lines)}
         except Exception as e:
             return {"success": False, "result": f"News error: {e}"}
 
@@ -2939,8 +2937,8 @@ class RedditTool(BaseTool):
         count = min(int(params.get("count", 10)), 30)
         try:
             import urllib.request
-            url = f"https://www.reddit.com/r/{subreddit}/{category}.json?limit={count}"
-            req = urllib.request.Request(url, headers={"User-Agent": "JarvisAssistant/2.0"})
+            url = f"https://www.reddit.com/r/{subreddit}/{category}.json?limit={count}&raw_json=1"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
             with urllib.request.urlopen(req, timeout=10) as r:
                 data = json.loads(r.read())
             posts = data.get("data", {}).get("children", [])
@@ -2961,12 +2959,14 @@ class WikipediaTool(BaseTool):
         try:
             import urllib.request, urllib.parse
             url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(query)
-            with urllib.request.urlopen(url, timeout=10) as r:
+            req = urllib.request.Request(url, headers={"User-Agent": "Jarvis/2.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
                 data = json.loads(r.read())
             extract = data.get("extract", "")
-            if not extract:
-                return {"success": True, "result": "No summary available"}
-            return {"success": True, "result": f"**{data.get('title', query)}**\n{extract[:2000]}"}
+            title = data.get("title", query)
+            if not extract or "may refer to" in extract.lower()[:50]:
+                return {"success": False, "result": f"'{query}' is ambiguous. Try a more specific query."}
+            return {"success": True, "result": f"**{title}**\n{extract[:2000]}"}
         except urllib.error.HTTPError:
             return {"success": False, "result": f"No Wikipedia page found for '{query}'"}
         except Exception as e:
@@ -3001,7 +3001,7 @@ class WeatherForecastTool(BaseTool):
             result = f"Forecast for {city}:\n"
             for i in range(len(dates)):
                 wc = weather_names.get(codes[i] if i < len(codes) else 0, "Unknown")
-                result += f"  {dates[i]}: {tmin[i]}–{tmax[i]}°C, {wc}, {precip[i]}mm rain\n"
+                result += f"  {dates[i]}: {tmin[i]}-{tmax[i]}C, {wc}, {precip[i]}mm rain\n"
             return {"success": True, "result": result}
         except Exception as e:
             return {"success": False, "result": f"Forecast error: {e}"}
@@ -3014,9 +3014,14 @@ class CurrencyTool(BaseTool):
         to_cur = params.get("to", params.get("to_currency", "EUR")).upper()
         try:
             import urllib.request
-            with urllib.request.urlopen(f"https://api.frankfurter.app/latest?from={from_cur}&to={to_cur}", timeout=10) as r:
+            req = urllib.request.Request(f"https://api.exchangerate-api.com/v4/latest/{from_cur}",
+                                          headers={"User-Agent": "Jarvis/2.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
                 data = json.loads(r.read())
-            rate = data.get("rates", {}).get(to_cur, 1)
+            rates = data.get("rates", {})
+            if to_cur not in rates:
+                return {"success": False, "result": f"No rate for {to_cur}"}
+            rate = rates[to_cur]
             converted = amount * rate
             return {"success": True, "result": f"{amount} {from_cur} = {converted:.2f} {to_cur} (rate: {rate:.4f})"}
         except Exception as e:
@@ -3030,7 +3035,9 @@ class StockTool(BaseTool):
             return {"success": False, "result": "Symbol required (e.g. AAPL)"}
         try:
             import urllib.request
-            with urllib.request.urlopen(f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}", timeout=10) as r:
+            req = urllib.request.Request(f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+                                          headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
                 data = json.loads(r.read())
             result = data.get("chart", {}).get("result", [{}])[0]
             meta = result.get("meta", {})
@@ -3038,6 +3045,10 @@ class StockTool(BaseTool):
             name = meta.get("exchangeName", "")
             currency = meta.get("currency", "USD")
             return {"success": True, "result": f"{symbol} ({name}): ${price} {currency}"}
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                return {"success": False, "result": "Stock API rate limited. Try again later."}
+            return {"success": False, "result": f"Stock API error: {e.code}"}
         except Exception as e:
             return {"success": False, "result": f"Stock error: {e}"}
 
@@ -3049,13 +3060,15 @@ class MovieTool(BaseTool):
             return {"success": False, "result": "Title required"}
         try:
             q = urllib.parse.quote(title)
-            with urllib.request.urlopen(f"https://www.omdbapi.com/?t={q}&apikey=2c9d2e0e", timeout=10) as r:
+            req = urllib.request.Request(f"https://www.omdbapi.com/?t={q}&apikey=2c9d2e0e",
+                                          headers={"User-Agent": "Jarvis/2.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
                 data = json.loads(r.read())
-            if data.get("Response") == "False":
-                return {"success": False, "result": data.get("Error", "Movie not found")}
-            return {"success": True, "result": f"**{data.get('Title')}** ({data.get('Year')})\nRating: {data.get('imdbRating')}/10\nGenre: {data.get('Genre')}\nDirector: {data.get('Director')}\nPlot: {data.get('Plot', '')[:500]}"}
+            if data.get("Response") == "True":
+                return {"success": True, "result": f"**{data.get('Title')}** ({data.get('Year')})\nRating: {data.get('imdbRating')}/10\nGenre: {data.get('Genre')}\nDirector: {data.get('Director')}\nPlot: {data.get('Plot', '')[:500]}"}
+            return {"success": False, "result": data.get("Error", "Movie not found")}
         except Exception as e:
-            return {"success": False, "result": f"Movie error: {e}"}
+            return {"success": False, "result": f"Movie error: API unavailable. Try: {title}"}
 
 
 class RecipeTool(BaseTool):
