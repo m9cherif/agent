@@ -1,63 +1,63 @@
-# J.A.R.V.I.S — Autonomous AI Desktop Assistant
+# J.A.R.V.I.S
 
-Voice-first AI assistant with real-time screen vision, mouse/keyboard control, and 57+ tools. Powered by OpenRouter.
+> Fully autonomous AI desktop assistant with voice, vision, and 57+ tools.
 
-## Features
-
-- **Voice Interface** — British male JARVIS voice (edge-tts), SAPI fallback
-- **Real-time Screen Vision** — Background 2fps capture, frame differencing, change detection
-- **Full Desktop Control** — Mouse move/click/drag/scroll, keyboard type/hotkeys via `SendInput`
-- **57+ Tools** — Screen watch, window management, file ops, web search, OCR, calculator, weather, notes, todo, crypto, QR, clipboard, translation, and more
-- **Unlimited Tool Chaining** — AI calls tools recursively until your task is done
-- **Iron Man HUD** — Animated eye, radar sweep, rotating hex, scanning arcs, data readouts
-- **Sound Effects** — Startup chime, message/thinking/done/error sounds
-
-## Quick Start
+## 🚀 One-Command Setup
 
 ```bash
-# Windows
-requirements.bat
+# Windows (open Command Prompt as Admin):
+python setup.py
 
-# Kali Linux / Debian
-chmod +x requirements.sh && ./requirements.sh
+# Kali Linux / Debian:
+python3 setup.py
 ```
 
-```bash
-# 1. Install deps
-requirements.bat        # Windows
-chmod +x requirements.sh && ./requirements.sh  # Kali Linux
+**That's it.** The API key is built-in — it works immediately after setup.
 
-# 2. Launch (API key built-in, works immediately)
+---
+
+## Manual Setup
+
+### Windows
+```
+requirements.bat
 python -m jarvis_app.main
 ```
 
-> To use your **own** API key instead of the built-in one, edit `.env` and set your `OPENROUTER_API_KEY`. Get a free key at [openrouter.ai/keys](https://openrouter.ai/keys).
+### Kali Linux
+```
+chmod +x requirements.sh && sudo ./requirements.sh
+python3 run_jarvis.py
+```
 
-## Environment Variables
+## Use your own API key
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENROUTER_API_KEY` | OpenRouter API key (required) | — |
-| `OPENROUTER_BASE_URL` | API endpoint | `https://openrouter.ai/api/v1` |
-| `JARVIS_MODEL` | LLM model | `google/gemini-2.0-flash-exp:free` |
-| `JARVIS_GOVERNANCE_LEVEL` | Security (0=all, 1=blocked, 2=read-only) | `1` |
+Edit `.env` and set:
+```
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
+```
+Get a free key at [openrouter.ai/keys](https://openrouter.ai/keys).
 
-## Tools
+---
 
-`web_search`, `file_read`, `file_write`, `run_command`, `calculator`, `weather`, `time`, `system_info`, `screenshot`, `vision`, `ocr`, `screen_watch`, `input_control`, `window(list/maximize/minimize/focus/close/move)`, `volume`, `media`, `notification`, `disk(cpu/ram/disk)`, `idle`, `browser`, `wallpaper`, `lock`, `env`, `color`, `unit`, `math_eval`, `notes`, `todo`, `todowrite`, `clipboard`, `define`, `joke`, `quote`, `random`, `convert`, `translate`, `audio`, `network`, `crypto`, `qr_code`, `json`, `hash`, `archive`, `news`, `shorten`, `ip_geo`, `process`, `file_search`, `password`, `edit`, `grep`, `glob`, `apply_patch`, `webfetch`, `question`, `skill`, `battery` — **57 total**
+## What it does
 
-## Voice Commands
+- **Talk to it** — British male JARVIS voice, listens and responds
+- **Sees your screen** — Real-time vision, frame change detection
+- **Controls your PC** — Mouse, keyboard, windows, volume, media, files, browser
+- **57 tools** — web search, calculator, weather, notes, todo, clipboard, OCR, QR codes, translation, crypto prices, news, and more
+- **Iron Man HUD** — Animated eye with radar sweep, targeting reticle, data readouts
 
-- "click" / "right click" / "double click" — instant mouse actions (bypasses AI)
-- "move mouse to X Y" — instant cursor movement
-- "scroll up/down N" — instant scroll
+## Voice commands
 
-## Security
+Say these **instantly** (no AI delay):
+- `"click"` / `"right click"` / `"double click"`
+- `"move mouse to 500 300"`
+- `"scroll down 5"`
 
-Governance levels control tool access:
-- **0 (Low)** — All tools allowed
-- **1 (Medium)** — Destructive actions blocked (default)
-- **2 (High)** — Read-only tools, system commands blocked
+## Default model
+
+`google/gemini-2.0-flash-exp:free` (fast, correct JSON tool calls)
 
 ## License
 

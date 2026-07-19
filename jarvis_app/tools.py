@@ -131,7 +131,10 @@ class SystemControlTool(BaseTool):
                 return {"success": True, "result": output or "Done (no output)"}
             elif action == "open":
                 target = params.get("target", "")
-                os.startfile(target)
+                if hasattr(os, "startfile"):
+                    os.startfile(target)
+                else:
+                    subprocess.Popen(["xdg-open", target])
                 return {"success": True, "result": f"Opened {target}"}
             else:
                 return {"success": False, "result": f"Unknown action: {action}"}

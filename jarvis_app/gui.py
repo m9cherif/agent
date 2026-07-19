@@ -6,14 +6,16 @@ import re
 import struct
 import threading
 import tkinter as tk
-import winsound
 from jarvis_app.todo_overlay import show_todo_overlay, hide_todo_overlay, toggle_todo_overlay
 
 
 def handle_direct_mouse(text, voice):
     """Execute mouse commands directly, bypassing AI for instant response"""
+    try:
+        import win32api, win32con
+    except ImportError:
+        return False
     t = text.lower().strip()
-    import win32api, win32con
 
     # mouse position
     if re.search(r'(?:mouse|cursor)\s*(?:position|location|where|status)', t) or re.search(r'where\s*(?:is|are)\s*(?:the|)\s*(?:mouse|cursor)', t):
@@ -148,7 +150,7 @@ class HudSounds:
                 buf = self._gen_beep(880, 60) + self._gen_beep(660, 60)[30:]
             else:
                 buf = self._gen_beep(660, 50)
-            import tempfile
+            import tempfile, winsound
             f = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             fpath = f.name
             f.close()
