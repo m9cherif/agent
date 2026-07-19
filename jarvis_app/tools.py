@@ -2384,10 +2384,10 @@ class MathEvalTool(BaseTool):
 class IdleTool(BaseTool):
     """Get system idle time and uptime"""
     def execute(self, params):
+        import ctypes
         target = params.get("target", "all")
         results = []
         if target in ("all", "idle"):
-            import ctypes
             class LASTINPUTINFO(ctypes.Structure):
                 _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
             lii = LASTINPUTINFO()
