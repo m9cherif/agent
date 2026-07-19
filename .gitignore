@@ -3,6 +3,8 @@ __pycache__/
 *.pyo
 .env
 *.egg-info/
+.google-cookie
+*.session
 dist/
 build/
 *.wav
