@@ -384,7 +384,7 @@ class WaveformVisualizer:
         self.canvas.create_text(8, 10, text="J.A.R.V.I.S", font=("Consolas", 6),
                                 fill=f"#00{int(pulse*0.5):02x}ff", anchor="nw")
         self.canvas.create_line(w - 6 - bw, 5, w - 6, 5, w - 6, 5 + bw, fill=c, width=2)
-        self.canvas.create_text(w - 10, 10, text="v3.0", font=("Consolas", 6),
+        self.canvas.create_text(w - 10, 10, text="v4.0", font=("Consolas", 6),
                                 fill=f"#00{int(pulse*0.5):02x}ff", anchor="ne")
         self.canvas.create_line(5, h - 6 - bw, 5, h - 6, 5 + bw, h - 6, fill=c, width=2)
         self.canvas.create_text(8, h - 18, text=f"ARC {self.state.upper()}", font=("Consolas", 6),
@@ -910,7 +910,7 @@ class JarvisGUI:
         self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Version
-        tk.Label(btn_row, text="v3.0", font=("Consolas", 8),
+        tk.Label(btn_row, text="v4.0", font=("Consolas", 8),
                  fg=C["status_color"], bg=C["bg"]).pack(side=tk.RIGHT, padx=(0, 4))
 
         # ── Menu bar ──

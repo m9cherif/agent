@@ -3456,7 +3456,7 @@ class EquationSolveTool(BaseTool):
 
 
 # ════════════════════════════════════════════
-# Student & Teacher Tools (33 tools)
+# Student & Teacher Tools (53 tools)
 # ════════════════════════════════════════════
 
 _STUDY_DIR = os.path.join(os.path.expanduser("~"), ".jarvis_study")
@@ -4889,6 +4889,684 @@ class NoteOrganizerTool(BaseTool):
             return {"success": False, "result": f"Note error: {e}"}
 
 
+class LessonPlanTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "a lesson").strip()
+        duration = params.get("duration", params.get("minutes", 45))
+        grade = params.get("grade", params.get("level", "high school"))
+        lines = [
+            f"Lesson Plan: {topic}", "=" * 40,
+            f"Grade Level: {grade} | Duration: {duration} min",
+            "",
+            "Learning Objectives:",
+            f"  • Understand key concepts of {topic}",
+            f"  • Apply {topic} knowledge to practical examples",
+            "  • Demonstrate comprehension through assessment",
+            "",
+            "Materials Needed:",
+            "  • Whiteboard / projector",
+            "  • Handouts / worksheets",
+            "  • Student notebooks",
+            "",
+            "Lesson Structure:",
+            f"  1. Hook/Introduction (5 min) — Grab attention with a question about {topic}",
+            "  2. Direct Instruction (10 min) — Present core content",
+            "  3. Guided Practice (10 min) — Work through examples together",
+            "  4. Independent Practice (10 min) — Students work individually",
+            "  5. Assessment (5 min) — Quick check for understanding",
+            "  6. Wrap-up (5 min) — Review key takeaways, preview next lesson",
+            "",
+            "Differentiation:",
+            "  • ELL: Provide vocabulary cards with visuals",
+            "  • Advanced: Extension problems for early finishers",
+            "  • Support: Pair struggling students with peer tutors",
+            "",
+            "Assessment:",
+            "  • Formative: Exit ticket with 3 questions",
+            "  • Summative: End-of-unit quiz",
+        ]
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class WorksheetGeneratorTool(BaseTool):
+    def execute(self, params):
+        subject = params.get("subject", params.get("topic", "math")).lower()
+        count = min(int(params.get("count", params.get("questions", 10))), 30)
+        difficulty = params.get("difficulty", "medium")
+        lines = [f"Worksheet: {subject.title()} — {difficulty}", "=" * 40,
+                 f"Name: ____________________  Date: ___________\n"]
+        if "math" in subject:
+            ops = ["+", "-", "×", "÷"]
+            for i in range(1, count + 1):
+                a, b = random.randint(5, 50), random.randint(5, 50)
+                op = random.choice(ops)
+                lines.append(f"{i}.  {max(a,b)}  {op}  {min(a,b)}  =  ______")
+        elif "vocab" in subject or "vocabulary" in subject:
+            words = ["benevolent", "ephemeral", "pragmatic", "ambiguous", "diligent",
+                     "eloquent", "resilient", "meticulous", "candid", "profound"]
+            random.shuffle(words)
+            for i in range(min(count, len(words))):
+                lines.append(f"{i+1}. Define: {words[i]}")
+                lines.append("   _______________________________________________\n")
+        elif "science" in subject:
+            topics = ["What is photosynthesis?",
+                      "List 3 states of matter.",
+                      "What causes the seasons?",
+                      "Describe the water cycle.",
+                      "What is a chemical reaction?"]
+            for i in range(min(count, len(topics))):
+                lines.append(f"{i+1}. {topics[i]}")
+                lines.append("   _______________________________________________\n")
+        else:
+            for i in range(count):
+                lines.append(f"{i+1}. What is an important concept in {subject}?")
+                lines.append("   _______________________________________________\n")
+        lines.append("\n--- Answer Key ---")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class ExamGeneratorTool(BaseTool):
+    def execute(self, params):
+        subject = params.get("subject", params.get("topic", "general"))
+        sections = min(int(params.get("sections", 3)), 5)
+        questions_per = min(int(params.get("questions", params.get("count", 5))), 15)
+        lines = [f"Exam: {subject.title()}", "=" * 40,
+                 f"Name: ____________________  Date: __________",
+                 f"Total: {sections * questions_per} points | Time: {sections * 10} min\n"]
+        section_types = ["Multiple Choice", "Short Answer", "True/False",
+                         "Matching", "Essay", "Fill in the Blank", "Problem Solving"]
+        for s in range(1, sections + 1):
+            stype = random.choice(section_types)
+            lines.append(f"\nSection {s}: {stype} ({questions_per} questions, {questions_per} pts)")
+            if stype == "Multiple Choice":
+                for q in range(1, questions_per + 1):
+                    lines.append(f"  {q}. What is a key concept in {subject}?")
+                    lines.append("     A) Option A    B) Option B    C) Option C    D) Option D")
+            elif stype == "Short Answer":
+                for q in range(1, questions_per + 1):
+                    lines.append(f"  {q}. Describe an important aspect of {subject}.")
+                    lines.append("       _______________________________________________")
+            elif stype == "True/False":
+                for q in range(1, questions_per + 1):
+                    lines.append(f"  {q}. True or False: A statement about {subject}.")
+            elif stype == "Essay":
+                for q in range(1, questions_per + 1):
+                    lines.append(f"  {q}. Write a short essay on a key {subject} topic.")
+            else:
+                for q in range(1, questions_per + 1):
+                    lines.append(f"  {q}. ________________________________")
+        lines.append(f"\n--- End of Exam ---")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class ProgressReportTool(BaseTool):
+    def execute(self, params):
+        student = params.get("student", params.get("name", "Student"))
+        subject = params.get("subject", params.get("class", "General"))
+        grade = params.get("grade", params.get("level", "B"))
+        comments_pool = [
+            f"{student} demonstrates a strong understanding of {subject} concepts.",
+            f"{student} shows enthusiasm and积极参与 in class discussions.",
+            f"{student} has shown improvement in {subject} this quarter.",
+            f"{student} consistently completes assignments on time.",
+            f"{student} would benefit from additional practice with {subject} fundamentals.",
+            f"{student} works well in group settings and collaborates effectively.",
+            f"{student} needs to focus on organization and time management.",
+            f"{student} asks insightful questions that enrich class discussions.",
+            f"{student} should review {subject} material more consistently at home.",
+            f"{student} demonstrates creativity in approaching {subject} problems.",
+        ]
+        random.shuffle(comments_pool)
+        selected = comments_pool[:4]
+        lines = [
+            f"Progress Report", "=" * 30,
+            f"Student: {student}",
+            f"Subject: {subject}",
+            f"Grade: {grade}",
+            f"Period: {datetime.date.today().strftime('%B %Y')}",
+            "",
+            "Academic Comments:",
+        ]
+        for c in selected:
+            lines.append(f"  • {c}")
+        lines.extend([
+            "",
+            "Areas for Improvement:",
+            f"  • Encourage {student} to seek help when needed",
+            "  • Practice {subject} skills for 15 min daily",
+            "",
+            "Teacher: ____________________",
+        ])
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class SeatingChartTool(BaseTool):
+    def execute(self, params):
+        names_str = params.get("names", params.get("students", ""))
+        cols = max(1, int(params.get("cols", params.get("columns", 4))))
+        rows = max(1, int(params.get("rows", 0)))
+        if not names_str:
+            return {"success": False, "result": "Provide comma-separated student names"}
+        names = [n.strip() for n in names_str.split(",") if n.strip()]
+        random.shuffle(names)
+        if not rows:
+            rows = (len(names) + cols - 1) // cols
+        lines = [f"Seating Chart ({rows} rows × {cols} columns)", "=" * 30, "  [FRONT OF CLASS]\n"]
+        idx = 0
+        for r in range(rows):
+            row_cells = []
+            for c in range(cols):
+                if idx < len(names):
+                    row_cells.append(f"{names[idx]:15s}")
+                else:
+                    row_cells.append("(empty)       ")
+                idx += 1
+            lines.append("  " + "  ".join(row_cells))
+        lines.append(f"\nTotal: {len(names)} students")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class IcebreakerTool(BaseTool):
+    def execute(self, params):
+        count = min(int(params.get("count", 5)), 20)
+        audience = params.get("audience", params.get("group", "students"))
+        questions = [
+            f"If you could have dinner with any historical figure, who would it be?",
+            f"What is a skill you'd like to learn this year?",
+            f"What is your favorite book or movie and why?",
+            f"If you could travel anywhere, where would you go?",
+            f"What is a hobby you enjoy outside of school?",
+            f"What is one thing you're really good at?",
+            f"If you won the lottery, what would you do first?",
+            f"What is the best advice you've ever received?",
+            f"What superpower would you choose and why?",
+            f"What is your dream career?",
+            f"If you could switch lives with someone for a day, who?",
+            f"What is a food you could eat every day?",
+            f"What is a tradition your family has?",
+            f"What is something you want to accomplish this year?",
+            f"If you could invent something, what would it be?",
+            f"What is your favorite subject and why?",
+            f"What makes you feel inspired?",
+            f"What is the most interesting place you've visited?",
+            f"If you could meet any fictional character, who?",
+            f"What is one thing people would be surprised to learn about you?",
+        ]
+        random.shuffle(questions)
+        lines = [f"Icebreaker Questions ({audience})", "=" * 40, ""]
+        for i, q in enumerate(questions[:count], 1):
+            lines.append(f"{i}. {q}")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class DiscussionPromptTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "a given topic").strip()
+        count = min(int(params.get("count", 5)), 15)
+        level = params.get("level", params.get("depth", "moderate"))
+        prompts = [
+            f"What is the most significant aspect of {topic}? Why?",
+            f"How does {topic} relate to your own experience?",
+            f"What are the potential benefits and drawbacks of {topic}?",
+            f"Can you think of an example of {topic} in the real world?",
+            f"How might {topic} change in the next decade?",
+            f"What questions do you still have about {topic}?",
+            f"Do you agree or disagree with common views on {topic}? Explain.",
+            f"How would you explain {topic} to someone who knows nothing about it?",
+            f"What connections can you draw between {topic} and other subjects?",
+            f"Whose perspective is missing from our discussion of {topic}?",
+            f"What evidence would change your mind about {topic}?",
+            f"How does {topic} impact society as a whole?",
+            f"What would happen if {topic} were suddenly removed from the world?",
+            f"Can {topic} be viewed from a different cultural perspective?",
+            f"What is the ethical dimension of {topic}?",
+        ]
+        lines = [f"Discussion Prompts: {topic}", "=" * 40,
+                 f"Level: {level} | {count} questions\n"]
+        random.shuffle(prompts)
+        for i, p in enumerate(prompts[:count], 1):
+            lines.append(f"{i}. {p}")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class LearningObjectivesTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "a lesson").strip()
+        count = min(int(params.get("count", 4)), 10)
+        level = params.get("level", params.get("bloom", "apply"))
+        bloom_levels = {
+            "remember": ["Recall", "List", "Identify", "Name", "Define", "Describe"],
+            "understand": ["Explain", "Summarize", "Interpret", "Classify", "Paraphrase"],
+            "apply": ["Apply", "Demonstrate", "Solve", "Use", "Implement", "Execute"],
+            "analyze": ["Analyze", "Compare", "Contrast", "Examine", "Differentiate", "Investigate"],
+            "evaluate": ["Evaluate", "Justify", "Critique", "Assess", "Defend", "Argue"],
+            "create": ["Create", "Design", "Develop", "Construct", "Propose", "Formulate"],
+        }
+        verbs = bloom_levels.get(level.lower(), bloom_levels["apply"])
+        lines = [f"Learning Objectives: {topic}", "=" * 40,
+                 f"Bloom's Level: {level.title()}\n"]
+        for i in range(count):
+            verb = random.choice(verbs)
+            obj = f"{verb} key concepts related to {topic}"
+            lines.append(f"  • Students will be able to {obj.lower()}.")
+        lines.append(f"\n(SMART: Specific, Measurable, Achievable, Relevant, Time-bound)")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class ActivityGeneratorTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "a topic").strip()
+        duration = int(params.get("minutes", params.get("duration", 15)))
+        group_size = int(params.get("group_size", params.get("groups", 3)))
+        activities = [
+            {
+                "name": "Think-Pair-Share",
+                "desc": f"Students think individually about {topic}, discuss with a partner, then share with the class.",
+                "time": f"{duration} min",
+            },
+            {
+                "name": "Jigsaw",
+                "desc": f"Each group becomes expert on one aspect of {topic}, then teaches other groups.",
+                "time": f"{duration} min",
+            },
+            {
+                "name": "Debate",
+                "desc": f"Split class into two sides to argue different perspectives on {topic}.",
+                "time": f"{duration} min",
+            },
+            {
+                "name": "Concept Mapping",
+                "desc": f"Groups create a visual map showing relationships within {topic}.",
+                "time": f"{duration} min",
+            },
+            {
+                "name": "Gallery Walk",
+                "desc": f"Groups create posters about {topic}, then walk around to review each other's work.",
+                "time": f"{duration} min",
+            },
+            {
+                "name": "Role Play",
+                "desc": f"Students act out scenarios related to {topic} to understand different perspectives.",
+                "time": f"{duration} min",
+            },
+            {
+                "name": "Quiz Game",
+                "desc": f"Teams compete answering questions about {topic} in a game show format.",
+                "time": f"{duration} min",
+            },
+            {
+                "name": "Peer Teaching",
+                "desc": f"Each group prepares a mini-lesson on an assigned {topic} subtopic.",
+                "time": f"{duration} min",
+            },
+        ]
+        random.shuffle(activities)
+        selected = activities[:max(1, min(3, len(activities)))]
+        lines = [f"Classroom Activities: {topic}", "=" * 40,
+                 f"Duration: {duration} min | Group size: {group_size}\n"]
+        for i, act in enumerate(selected, 1):
+            lines.append(f"Activity {i}: {act['name']}")
+            lines.append(f"  {act['desc']}")
+            lines.append(f"  Time: {act['time']}\n")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class FeedbackTool(BaseTool):
+    POSITIVE = [
+        "excellent work on this assignment", "great improvement since last time",
+        "shows strong understanding of the material", "creative approach to problem-solving",
+        "consistently produces high-quality work", "actively participates in class",
+        "demonstrates leadership in group work", "asks thoughtful questions",
+        "shows genuine enthusiasm for learning", "works well independently",
+    ]
+    CONSTRUCTIVE = [
+        "would benefit from reviewing fundamental concepts",
+        "should focus on showing all work step by step",
+        "needs to double-check answers for accuracy",
+        "could improve by managing time more effectively",
+        "would benefit from participating more in discussions",
+        "should proofread work before submitting",
+        "needs to cite sources properly",
+        "could provide more detailed explanations",
+    ]
+    def execute(self, params):
+        student = params.get("student", params.get("name", "Student"))
+        subject = params.get("subject", "class")
+        count = min(int(params.get("count", 3)), 6)
+        lines = [f"Student Feedback: {student}", "=" * 35, f"Subject: {subject}\n"]
+        random.shuffle(self.POSITIVE)
+        random.shuffle(self.CONSTRUCTIVE)
+        pos_count = min(count, len(self.POSITIVE))
+        con_count = min(count, len(self.CONSTRUCTIVE))
+        half = max(1, count // 2)
+        lines.append("Strengths:")
+        for p in self.POSITIVE[:half]:
+            lines.append(f"  ✓ {p}.")
+        lines.append("\nAreas to Work On:")
+        for c in self.CONSTRUCTIVE[:count - half]:
+            lines.append(f"  ○ {c}.")
+        lines.append(f"\nOverall: {student} is making {'good' if random.random() > 0.3 else 'satisfactory'} progress in {subject}.")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class ReadingListTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "add")
+        path = os.path.join(_STUDY_DIR, "reading.json")
+        try:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    books = json.load(f)
+            else:
+                books = []
+            if action == "add":
+                title = params.get("title", "").strip()
+                author = params.get("author", "").strip()
+                category = params.get("category", params.get("subject", "General")).strip()
+                if not title:
+                    return {"success": False, "result": "Provide the book/article title"}
+                books.append({"title": title, "author": author, "category": category,
+                              "status": "unread", "added": time.time()})
+                with open(path, "w") as f:
+                    json.dump(books, f)
+                return {"success": True, "result": f"Added: {title}{' by ' + author if author else ''}"}
+            elif action == "list":
+                if not books:
+                    return {"success": True, "result": "No books in reading list"}
+                category = params.get("category", "")
+                pool = [b for b in books if not category or b.get("category") == category]
+                lines = [f"Reading List ({len(pool)} items):"]
+                for i, b in enumerate(pool, 1):
+                    author_str = f" by {b.get('author','?')}" if b.get('author') else ""
+                    lines.append(f"  {i}. {b['title']}{author_str} [{b.get('status','unread')}]")
+                return {"success": True, "result": "\n".join(lines)}
+            elif action == "mark":
+                title = params.get("title", "").strip()
+                status = params.get("status", "read")
+                for b in books:
+                    if title.lower() in b["title"].lower():
+                        b["status"] = status
+                        with open(path, "w") as f:
+                            json.dump(books, f)
+                        return {"success": True, "result": f"Marked '{b['title']}' as {status}"}
+                return {"success": False, "result": f"Book not found: {title}"}
+            return {"success": False, "result": "Actions: add, list, mark"}
+        except Exception as e:
+            return {"success": False, "result": f"Reading list error: {e}"}
+
+
+class StudyGuideTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "").strip()
+        subtopics_str = params.get("subtopics", params.get("topics", ""))
+        if not topic and not subtopics_str:
+            return {"success": False, "result": "Provide topic or subtopics (comma-separated)"}
+        subtopics = [s.strip() for s in subtopics_str.split(",") if s.strip()]
+        if not subtopics:
+            subtopics = [f"Introduction to {topic}", f"Core {topic} Concepts",
+                         f"Key {topic} Terms", f"{topic} Examples", f"{topic} Practice"]
+        lines = [f"Study Guide: {topic or subtopics[0]}", "=" * 40, ""]
+        for i, sub in enumerate(subtopics, 1):
+            lines.append(f"Topic {i}: {sub}")
+            lines.append("  Key Points:")
+            for p in range(3):
+                lines.append(f"    • Important concept about {sub.lower()}")
+            lines.append("  Key Terms:")
+            for t in range(2):
+                lines.append(f"    • {sub.split()[-1 if len(sub.split()) > 1 else 0].title()} — definition")
+            lines.append("  Review Questions:")
+            for q in range(2):
+                lines.append(f"    ? Explain the significance of {sub.lower()}")
+            lines.append("")
+        lines.append("Study Tips:")
+        lines.append("  • Review this guide and create flashcards for key terms")
+        lines.append("  • Teach the material to someone else")
+        lines.append("  • Practice with sample problems")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class TimelineTool(BaseTool):
+    def execute(self, params):
+        title = params.get("title", params.get("topic", "Timeline")).strip()
+        events_str = params.get("events", params.get("items", ""))
+        if events_str:
+            events = [e.strip() for e in events_str.split(",") if e.strip()]
+        else:
+            events = [f"Event 1 — Beginning of {title}",
+                      f"Event 2 — Development phase",
+                      f"Event 3 — Key milestone",
+                      f"Event 4 — Turning point",
+                      f"Event 5 — Modern {title}"]
+        years_str = params.get("years", "")
+        years = [y.strip() for y in years_str.split(",") if y.strip()] if years_str else []
+        lines = [f"Timeline: {title}", "=" * 40, ""]
+        for i, event in enumerate(events):
+            year = years[i] if i < len(years) else ""
+            year_str = f" [{year}]" if year else ""
+            lines.append(f"  {i+1}. {event}{year_str}")
+            lines.append(f"     {'─' * 30}")
+        lines.append(f"\n{len(events)} events documented")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class MindMapTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "").strip()
+        branches_str = params.get("branches", params.get("items", ""))
+        if not topic and not branches_str:
+            return {"success": False, "result": "Provide topic or branches (comma-separated)"}
+        branches = [b.strip() for b in branches_str.split(",") if b.strip()]
+        if not branches:
+            branches = [f"{topic} Basics", f"Key {topic} Concepts",
+                        f"{topic} Applications", f"{topic} Examples", f"{topic} Resources"]
+        lines = [f"Mind Map: {topic or 'Untitled'}", "=" * 40,
+                 f"                     [{topic or 'Central Idea'}]", "                          |\n"]
+        for i, branch in enumerate(branches, 1):
+            lines.append(f"  {i}.─── {branch}")
+            for sub in range(2):
+                lines.append(f"       ├── Subtopic: {branch.split()[-1]} aspect {sub + 1}")
+            lines.append(f"       └── Detail: Related {topic.lower() if topic else 'concept'} note")
+            if i < len(branches):
+                lines.append("       |")
+        lines.append(f"\nBranches: {len(branches)}")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class ThesisStatementTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "").strip()
+        style = params.get("style", params.get("type", "argumentative")).lower()
+        if not topic:
+            return {"success": False, "result": "Provide essay topic"}
+        templates = {
+            "argumentative": [
+                f"Although some argue that {topic} is straightforward, a closer examination reveals complex nuances that demand our attention.",
+                f"While {topic} has its benefits, the drawbacks outweigh them when considering long-term consequences.",
+                f"This essay argues that {topic} is not merely a matter of opinion, but a critical issue requiring immediate action.",
+            ],
+            "expository": [
+                f"Through an analysis of {topic}, this essay will explore the three key factors that shape our understanding.",
+                f"The phenomenon of {topic} can be understood by examining its historical origins, modern manifestations, and future implications.",
+                f"{topic} is composed of several interrelated components, each playing a crucial role in the overall system.",
+            ],
+            "analytical": [
+                f"A critical analysis of {topic} reveals underlying patterns that challenge conventional assumptions.",
+                f"By examining {topic} through multiple theoretical lenses, we gain a more comprehensive understanding of its impact.",
+                f"The evidence surrounding {topic} points to a conclusion that contradicts popular belief.",
+            ],
+            "compare": [
+                f"While {topic} and its alternatives share common goals, they differ fundamentally in their approach and outcomes.",
+                f"A comparison of different perspectives on {topic} reveals that context is the determining factor in choosing the best approach.",
+            ],
+        }
+        pool = templates.get(style, templates["argumentative"])
+        thesis = random.choice(pool)
+        lines = [f"Thesis Statement: {topic}", "=" * 40,
+                 f"Style: {style.title()}\n", f"\"{thesis}\"", "",
+                 "Tips:", "  • Make sure your thesis is debatable (not a fact)",
+                 "  • Keep it specific and focused",
+                 "  • Place it at the end of your introduction"]
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class AbstractGeneratorTool(BaseTool):
+    def execute(self, params):
+        title = params.get("title", "").strip()
+        topic = params.get("topic", "").strip()
+        key_points = params.get("key_points", params.get("points", "")).strip()
+        if not topic and not title:
+            return {"success": False, "result": "Provide topic or title"}
+        points = [p.strip() for p in key_points.split(",") if p.strip()] if key_points else [
+            f"Background on {topic or title}", f"Methodology for studying {topic or title}",
+            f"Key findings related to {topic or title}", f"Implications of these findings"]
+        abstract = (f"This paper examines {topic or title.lower()}, focusing on its key aspects and implications. "
+                    f"Through a comprehensive analysis of {points[0].lower()}, we identify significant patterns. "
+                    f"Our approach, based on {points[1].lower() if len(points) > 1 else 'established methodologies'}, "
+                    f"reveals that {points[2].lower() if len(points) > 2 else 'the findings are noteworthy'}. "
+                    f"These results suggest that {points[3].lower() if len(points) > 3 else 'further research is needed'}. "
+                    f"This work contributes to the broader understanding of {topic or title.lower()} "
+                    f"and offers practical insights for future research.")
+        lines = [f"Abstract: {title or topic}", "=" * 40, "",
+                 f"\"{abstract}\"", "",
+                 f"Keywords: {', '.join(points[:5]) if points else topic.lower()}",
+                 f"Word count: ~{len(abstract.split())}  words"]
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class FlashcardImportTool(BaseTool):
+    def execute(self, params):
+        text = params.get("text", "").strip()
+        deck = params.get("deck", "imported").strip()
+        path = os.path.join(_STUDY_DIR, "flashcards.json")
+        if not text:
+            return {"success": False, "result": "Provide text with Q&A pairs (one per line, Q|A or Q:A format)"}
+        try:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    cards = json.load(f)
+            else:
+                cards = []
+            imported = 0
+            for line in text.split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                for sep in ["|", ":", ";", "\t"]:
+                    if sep in line:
+                        parts = line.split(sep, 1)
+                        q, a = parts[0].strip(), parts[1].strip()
+                        if q and a:
+                            cards.append({"question": q, "answer": a, "deck": deck, "box": 0})
+                            imported += 1
+                            break
+            with open(path, "w") as f:
+                json.dump(cards, f)
+            return {"success": True, "result": f"Imported {imported} cards to deck '{deck}'"}
+        except Exception as e:
+            return {"success": False, "result": f"Import error: {e}"}
+
+
+class CheatSheetTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "").strip()
+        items_str = params.get("items", "")
+        if not topic and not items_str:
+            return {"success": False, "result": "Provide topic or items"}
+        items = [i.strip() for i in items_str.split(",") if i.strip()]
+        if not items:
+            items = [f"Definition of {topic}", f"Key formula for {topic}",
+                     f"Important rule in {topic}", f"Common example of {topic}",
+                     f"Memory tip for {topic}"]
+        formulas_pool = [
+            ("Formula", "A = πr² (area of circle)"),
+            ("Formula", "E = mc² (energy-mass)"),
+            ("Rule", "PEMDAS (order of operations)"),
+            ("Rule", "i before e except after c"),
+            ("Constant", "π ≈ 3.14159"),
+            ("Constant", "e ≈ 2.71828"),
+            ("Conversion", "1 inch = 2.54 cm"),
+            ("Conversion", "0°C = 32°F"),
+        ]
+        lines = [f"Cheat Sheet: {topic or 'Reference'}", "=" * 40, ""]
+        lines.append("Quick Reference:")
+        for item in items:
+            lines.append(f"  • {item}")
+        lines.append(f"\nKey {topic + ' ' if topic else ''}Formulas:")
+        random.shuffle(formulas_pool)
+        for cat, val in formulas_pool[:4]:
+            lines.append(f"  • [{cat}] {val}")
+        lines.append("\nPro Tips:")
+        lines.append("  • Focus on understanding concepts, not memorizing")
+        lines.append("  • Draw diagrams to visualize relationships")
+        lines.append("  • Practice with real examples")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class ConceptMapTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "").strip()
+        concepts_str = params.get("concepts", params.get("items", ""))
+        if not topic and not concepts_str:
+            return {"success": False, "result": "Provide topic or concepts (comma-separated)"}
+        concepts = [c.strip() for c in concepts_str.split(",") if c.strip()]
+        if not concepts:
+            concepts = [topic, f"{topic} Types", f"{topic} Examples",
+                        f"{topic} Properties", f"{topic} Applications"]
+        rel_verbs = ["is a type of", "leads to", "depends on", "is part of",
+                     "contradicts", "supports", "is an example of", "relates to"]
+        lines = [f"Concept Map: {topic or 'Untitled'}", "=" * 40,
+                 f"Central Concept: {concepts[0]}\n"]
+        for i in range(1, len(concepts)):
+            verb = random.choice(rel_verbs)
+            lines.append(f"  [{concepts[0]}]")
+            lines.append(f"     │")
+            lines.append(f"     ├─ {verb} ── [{concepts[i]}]")
+            lines.append(f"     │")
+        lines.append("\nRelationships:")
+        for i in range(1, min(len(concepts), 6)):
+            for j in range(i + 1, min(len(concepts), 6)):
+                verb = random.choice(rel_verbs)
+                lines.append(f"  • {concepts[i]} {verb} {concepts[j]}")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class QuizMeTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "start")
+        path = os.path.join(_STUDY_DIR, "flashcards.json")
+        try:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    cards = json.load(f)
+            else:
+                cards = []
+            deck = params.get("deck", "default")
+            pool = [c for c in cards if c.get("deck", "default") == deck]
+            if not pool:
+                return {"success": False, "result": f"No cards in deck '{deck}'. Add cards with flashcard first."}
+            if action == "start":
+                random.shuffle(pool)
+                n = min(int(params.get("count", len(pool))), len(pool))
+                session = pool[:n]
+                lines = [f"Quiz Mode: {deck} ({n} questions)", "=" * 35, ""]
+                for i, card in enumerate(session, 1):
+                    lines.append(f"Q{i}: {card['question']}")
+                    lines.append(f"A{i}: ||{card['answer']}||")
+                    lines.append("")
+                lines.append("(Answers hidden behind ||spoiler|| tags — highlight to reveal)")
+                return {"success": True, "result": "\n".join(lines)}
+            elif action == "answer":
+                lines = [f"Deck '{deck}' answers:\n"]
+                for i, card in enumerate(pool, 1):
+                    lines.append(f"Q{i}: {card['question']}")
+                    lines.append(f"A{i}: {card['answer']}")
+                    lines.append("")
+                return {"success": True, "result": "\n".join(lines)}
+            return {"success": False, "result": "Actions: start (quiz with hidden answers), answer (show all answers)"}
+        except Exception as e:
+            return {"success": False, "result": f"Quiz error: {e}"}
+
+
 def create_default_registry():
     registry = ToolRegistry()
     registry.register("web_search", WebSearchTool())
@@ -5001,7 +5679,7 @@ def create_default_registry():
     registry.register("counter", CounterTool())
     registry.register("progress", ProgressTool())
     registry.register("color_picker", ColorPickerTool())
-    # Student & Teacher Tools (33)
+    # Student & Teacher Tools (53)
     registry.register("flashcard", FlashcardTool())
     registry.register("quiz", QuizTool())
     registry.register("study_set", StudySetTool())
@@ -5035,4 +5713,25 @@ def create_default_registry():
     registry.register("note_organizer", NoteOrganizerTool())
     registry.register("bibliography", BibliographyTool())
     registry.register("equation_solve", EquationSolveTool())
+    # Student & Teacher Tools batch 2 (20)
+    registry.register("lesson_plan", LessonPlanTool())
+    registry.register("worksheet", WorksheetGeneratorTool())
+    registry.register("exam", ExamGeneratorTool())
+    registry.register("progress_report", ProgressReportTool())
+    registry.register("seating_chart", SeatingChartTool())
+    registry.register("icebreaker", IcebreakerTool())
+    registry.register("discussion", DiscussionPromptTool())
+    registry.register("learning_objectives", LearningObjectivesTool())
+    registry.register("activity", ActivityGeneratorTool())
+    registry.register("feedback", FeedbackTool())
+    registry.register("reading_list", ReadingListTool())
+    registry.register("study_guide", StudyGuideTool())
+    registry.register("timeline", TimelineTool())
+    registry.register("mind_map", MindMapTool())
+    registry.register("thesis_statement", ThesisStatementTool())
+    registry.register("abstract", AbstractGeneratorTool())
+    registry.register("flashcard_import", FlashcardImportTool())
+    registry.register("cheat_sheet", CheatSheetTool())
+    registry.register("concept_map", ConceptMapTool())
+    registry.register("quiz_me", QuizMeTool())
     return registry
