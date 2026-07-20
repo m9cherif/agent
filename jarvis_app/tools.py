@@ -2,6 +2,8 @@
 
 import json
 import os
+import socket
+import struct
 import sys
 import subprocess
 import ssl
@@ -5567,6 +5569,1133 @@ class QuizMeTool(BaseTool):
             return {"success": False, "result": f"Quiz error: {e}"}
 
 
+# ════════════════════════════════════════════
+# Cybersecurity Tools (20 tools)
+# ════════════════════════════════════════════
+
+class PortScannerTool(BaseTool):
+    COMMON_PORTS = [(21, "FTP"), (22, "SSH"), (23, "Telnet"), (25, "SMTP"), (53, "DNS"),
+                    (80, "HTTP"), (110, "POP3"), (143, "IMAP"), (443, "HTTPS"), (445, "SMB"),
+                    (993, "IMAPS"), (995, "POP3S"), (1433, "MSSQL"), (1521, "Oracle"),
+                    (2049, "NFS"), (3306, "MySQL"), (3389, "RDP"), (5432, "PostgreSQL"),
+                    (5900, "VNC"), (6379, "Redis"), (8080, "HTTP-Proxy"), (8443, "HTTPS-Alt"),
+                    (27017, "MongoDB"), (11211, "Memcached")]
+
+    def execute(self, params):
+        host = params.get("host", params.get("target", ""))
+        if not host:
+            return {"success": False, "result": "Provide target host"}
+        port_str = params.get("ports", "")
+        timeout_f = max(0.5, min(float(params.get("timeout", 2)), 10))
+        if port_str:
+            try:
+                ports = [int(p.strip()) for p in port_str.split(",") if p.strip()]
+            except ValueError:
+                return {"success": False, "result": "Invalid port list"}
+        else:
+            ports = [p[0] for p in self.COMMON_PORTS]
+        # Remove hostname from result if it resolves
+        try:
+            target_ip = socket.gethostbyname(host)
+        except socket.gaierror:
+            return {"success": False, "result": f"Cannot resolve {host}"}
+        open_ports = []
+        for port in ports:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(timeout_f)
+                result = s.connect_ex((target_ip, port))
+                s.close()
+                if result == 0:
+                    service = next((svc for p, svc in self.COMMON_PORTS if p == port), "Unknown")
+                    open_ports.append(f"  {port}/tcp  {service}")
+            except Exception:
+                pass
+        if open_ports:
+            return {"success": True, "result": f"Open ports on {host} ({target_ip}):\n" + "\n".join(open_ports)}
+        return {"success": True, "result": f"No open ports found on {host} ({target_ip}) among {len(ports)} scanned"}
+
+
+class SubdomainEnumTool(BaseTool):
+    _WORDLIST = ["www", "mail", "ftp", "admin", "blog", "shop", "api", "cdn", "dev", "test",
+                 "webmail", "support", "vpn", "m", "mobile", "app", "portal", "secure", "beta",
+                 "demo", "stage", "backup", "dns", "ns1", "ns2", "smtp", "pop", "imap",
+                 "remote", "git", "jenkins", "jira", "confluence", "wiki", "help", "forum",
+                 "docs", "status", "stats", "analytics", "tracking", "images", "static",
+                 "assets", "video", "media", "download", "upload", "cloud", "proxy"]
+
+    def execute(self, params):
+        domain = params.get("domain", params.get("target", "")).strip()
+        if not domain:
+            return {"success": False, "result": "Provide a domain"}
+        wordlist_str = params.get("wordlist", "")
+        wordlist = [w.strip() for w in wordlist_str.split(",") if w.strip()] if wordlist_str else self._WORDLIST
+        timeout_f = max(1, min(float(params.get("timeout", 3)), 10))
+        found = []
+        for sub in wordlist:
+            try:
+                hostname = f"{sub}.{domain}"
+                ip = socket.gethostbyname(hostname)
+                found.append(f"  {hostname} → {ip}")
+            except socket.gaierror:
+                pass
+        if found:
+            return {"success": True, "result": f"Subdomains of {domain} ({len(found)} found):\n" + "\n".join(found)}
+        return {"success": True, "result": f"No subdomains found for {domain} using {len(wordlist)} names"}
+
+
+class WhoisTool(BaseTool):
+    SERVER = "whois.iana.org"
+
+    def execute(self, params):
+        query = params.get("domain", params.get("target", "")).strip()
+        if not query:
+            return {"success": False, "result": "Provide a domain or IP"}
+        try:
+            whois_server = self.SERVER
+            if query.count(".") >= 1:
+                tld = query.split(".")[-1]
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(5)
+                    s.connect(("whois.iana.org", 43))
+                    s.send(f"{tld}\r\n".encode())
+                    resp = b""
+                    while True:
+                        d = s.recv(4096)
+                        if not d:
+                            break
+                        resp += d
+                    s.close()
+                    text = resp.decode("utf-8", errors="replace")
+                    m = re.search(r'whois:\s*(\S+)', text)
+                    if m:
+                        whois_server = m.group(1)
+                except Exception:
+                    whois_server = f"whois.{tld}"
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(10)
+            s.connect((whois_server, 43))
+            s.send(f"{query}\r\n".encode())
+            resp = b""
+            while True:
+                d = s.recv(4096)
+                if not d:
+                    break
+                resp += d
+            s.close()
+            text = resp.decode("utf-8", errors="replace")[:3000]
+            if not text.strip():
+                return {"success": True, "result": "No WHOIS data available"}
+            lines = [f"WHOIS: {query}", "=" * 40]
+            for line in text.split("\n")[:40]:
+                line = line.strip()
+                if line and not line.startswith("%") and not line.startswith("#"):
+                    lines.append(f"  {line}")
+            return {"success": True, "result": "\n".join(lines)}
+        except Exception as e:
+            return {"success": False, "result": f"WHOIS lookup error: {e}"}
+
+
+class SSLInspectorTool(BaseTool):
+    def execute(self, params):
+        host = params.get("host", params.get("target", "")).strip()
+        port = int(params.get("port", 443))
+        if not host:
+            return {"success": False, "result": "Provide a hostname"}
+        try:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = True
+            ctx.verify_mode = ssl.CERT_REQUIRED
+            with socket.create_connection((host, port), timeout=10) as sock:
+                with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                    cert = ssock.getpeercert()
+                    if not cert:
+                        return {"success": False, "result": "No certificate returned"}
+                    lines = [f"SSL Certificate: {host}:{port}", "=" * 40]
+                    lines.append(f"Subject: {dict(cert.get('subject', [])).get('commonName', 'N/A')}")
+                    lines.append(f"Issuer: {dict(cert.get('issuer', [])).get('organizationName', 'N/A')}")
+                    lines.append(f"Version: {cert.get('version', 'N/A')}")
+                    lines.append(f"Serial: {cert.get('serialNumber', 'N/A')}")
+                    lines.append(f"Valid From: {cert.get('notBefore', 'N/A')}")
+                    lines.append(f"Valid Until: {cert.get('notAfter', 'N/A')}")
+                    sans = cert.get('subjectAltName', [])
+                    if sans:
+                        lines.append(f"Subject Alt Names: {', '.join(s[1] for s in sans[:10])}")
+                    lines.append(f"SSL: {'TLSv1.3' if ssock.version() == 'TLSv1.3' else ssock.version()}")
+                    try:
+                        cipher = ssock.cipher()
+                        if cipher:
+                            lines.append(f"Cipher: {cipher[0]}")
+                    except Exception:
+                        pass
+                    return {"success": True, "result": "\n".join(lines)}
+        except ssl.SSLCertVerificationError as e:
+            return {"success": True, "result": f"SSL cert verification: {e}"}
+        except Exception as e:
+            return {"success": False, "result": f"SSL error: {e}"}
+
+
+class HTTPHeadersTool(BaseTool):
+    SECURITY_HEADERS = {
+        "Strict-Transport-Security": "HSTS — enforces HTTPS",
+        "Content-Security-Policy": "CSP — prevents XSS/clickjack",
+        "X-Frame-Options": "Prevents clickjacking",
+        "X-Content-Type-Options": "Prevents MIME sniffing",
+        "X-XSS-Protection": "XSS filter (deprecated but still used)",
+        "Referrer-Policy": "Controls referrer info leakage",
+        "Permissions-Policy": "Controls browser features",
+        "Set-Cookie": "Check for HttpOnly/Secure/SameSite flags",
+    }
+
+    def execute(self, params):
+        url = params.get("url", params.get("target", "")).strip()
+        if not url:
+            return {"success": False, "result": "Provide a URL (with http:// or https://)"}
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        try:
+            req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                headers = dict(resp.headers)
+            lines = [f"HTTP Security Headers: {url}", "=" * 40, f"Status: {resp.status}", ""]
+            missing = []
+            for hdr, desc in self.SECURITY_HEADERS.items():
+                value = headers.get(hdr, headers.get(hdr.lower(), ""))
+                if value:
+                    lines.append(f"  ✓ {hdr}: {value[:80]}")
+                else:
+                    lines.append(f"  ✗ {hdr} — MISSING ({desc})")
+                    missing.append(hdr)
+            lines.append(f"\nServer: {headers.get('Server', 'N/A')}")
+            lines.append(f"X-Powered-By: {headers.get('X-Powered-By', 'N/A')}")
+            lines.append(f"\nScore: {len(self.SECURITY_HEADERS) - len(missing)}/{len(self.SECURITY_HEADERS)} security headers present")
+            if missing:
+                lines.append(f"Missing: {', '.join(missing)}")
+            return {"success": True, "result": "\n".join(lines)}
+        except urllib.error.HTTPError as e:
+            return {"success": False, "result": f"HTTP {e.code}: {e.reason}"}
+        except Exception as e:
+            return {"success": False, "result": f"Headers error: {e}"}
+
+
+class URLAnalyzerTool(BaseTool):
+    SUSPICIOUS_TLDS = [".tk", ".ml", ".ga", ".cf", ".gq", ".xyz", ".top", ".club", ".work",
+                       ".bid", ".cam", ".click", ".download", ".review", ".stream", ".trade"]
+    PHISHING_KEYWORDS = ["login", "verify", "account", "update", "confirm", "secure", "bank",
+                         "paypal", "amazon", "apple", "google", "microsoft", "netflix", "password",
+                         "credential", "support", "signin", "auth", "authenticate", "reset"]
+
+    def execute(self, params):
+        url = params.get("url", params.get("target", "")).strip()
+        if not url:
+            return {"success": False, "result": "Provide a URL to analyze"}
+        url_lower = url.lower()
+        parsed = urllib.parse.urlparse(url if "://" in url else "//" + url)
+        domain = parsed.netloc or parsed.path.split("/")[0]
+        path = parsed.path + "?" + parsed.query if parsed.query else parsed.path
+        warnings = []
+        info = []
+        # Check for IP instead of domain
+        ip_match = re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', domain.split(":")[0])
+        if ip_match:
+            warnings.append("URL uses raw IP address instead of domain name")
+        # Check URL length
+        if len(url) > 100:
+            warnings.append(f"Unusually long URL ({len(url)} chars)")
+        # Check for @ symbol
+        if "@" in url_lower:
+            warnings.append("Contains '@' — used to hide real domain")
+        # Check for multiple subdomains
+        subdomain_count = domain.count(".")
+        if subdomain_count > 2:
+            warnings.append(f"Many subdomains ({subdomain_count}) — could be deceptive")
+        # Check suspicious TLDs
+        for tld in self.SUSPICIOUS_TLDS:
+            if url_lower.endswith(tld) or f".{tld}" in domain:
+                warnings.append(f"Suspicious TLD: {tld}")
+        # Check phishing keywords
+        found_keywords = [k for k in self.PHISHING_KEYWORDS if k in url_lower]
+        if found_keywords:
+            warnings.append(f"Phishing keywords detected: {', '.join(found_keywords)}")
+        # Check HTTPS
+        if url_lower.startswith("http://"):
+            warnings.append("No HTTPS — traffic is not encrypted")
+        elif url_lower.startswith("https://"):
+            info.append("Uses HTTPS (encrypted)")
+        # Check for common typosquatting
+        legit_domains = ["google", "facebook", "amazon", "microsoft", "apple", "paypal", "netflix"]
+        for d in legit_domains:
+            if d in domain and d != domain.split(".")[0]:
+                warnings.append(f"Possible typosquatting — '{domain}' looks like '{d}'")
+        # Domain age / info
+        try:
+            ip = socket.gethostbyname(domain.split(":")[0])
+            info.append(f"Resolved IP: {ip}")
+        except Exception:
+            warnings.append("Domain does not resolve")
+        lines = [f"URL Analysis: {url[:100]}", "=" * 40, f"Domain: {domain}", f"Path: {path[:80]}"]
+        if warnings:
+            lines.append(f"\n⚠ Warnings ({len(warnings)}):")
+            for w in warnings:
+                lines.append(f"  • {w}")
+        else:
+            lines.append("\n✓ No obvious red flags detected")
+        if info:
+            lines.append(f"\nInfo:")
+            for i in info:
+                lines.append(f"  • {i}")
+        threat_level = "HIGH" if len(warnings) >= 3 else ("MEDIUM" if warnings else "LOW")
+        lines.append(f"\nThreat Level: {threat_level}")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class IPReputationTool(BaseTool):
+    def execute(self, params):
+        ip = params.get("ip", params.get("target", "")).strip()
+        if not ip:
+            return {"success": False, "result": "Provide an IP address"}
+        if not re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip):
+            return {"success": False, "result": "Invalid IP address format"}
+        lines = [f"IP Reputation: {ip}", "=" * 40]
+        try:
+            ip_int = int(ip.replace(".", ""))
+        except Exception:
+            ip_int = 0
+        private = ip.startswith(("10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.",
+                                  "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
+                                  "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
+                                  "172.31.", "192.168.", "127.", "169.254."))
+        if private:
+            lines.append("Type: Private/Reserved IP")
+            lines.append("Threat: Local network only — not internet-routable")
+            return {"success": True, "result": "\n".join(lines)}
+        lines.append("Type: Public IP")
+        # Try reverse DNS
+        try:
+            hostname = socket.gethostbyaddr(ip)[0]
+            lines.append(f"PTR: {hostname}")
+        except Exception:
+            pass
+        # Check known malicious patterns
+        known_bad_ranges = []
+        for start, end, desc in known_bad_ranges:
+            parts = start.split(".")
+            # Simple range check
+            if start <= ip <= end:
+                lines.append(f"⚠ Listed in known threat range: {desc}")
+        try:
+            req = urllib.request.Request(f"https://ipapi.co/{ip}/json/",
+                                         headers={"User-Agent": "JARVIS/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read())
+            org = data.get("org", data.get("asn", ""))
+            country = data.get("country_name", "")
+            city = data.get("city", "")
+            isp = data.get("isp", "")
+            if org:
+                lines.append(f"Organization: {org}")
+            if country:
+                lines.append(f"Country: {country}{', ' + city if city else ''}")
+            if isp:
+                lines.append(f"ISP: {isp}")
+        except Exception:
+            pass
+        lines.append("\nRecommendation: Check abuseipdb.com or virustotal.com for detailed reports")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class CVESearchTool(BaseTool):
+    def execute(self, params):
+        keyword = params.get("keyword", params.get("query", "")).strip()
+        cve_id = params.get("cve", "").strip().upper()
+        if not keyword and not cve_id:
+            return {"success": False, "result": "Provide a keyword (e.g., 'apache log4j') or CVE ID (e.g., CVE-2021-44228)"}
+        try:
+            if cve_id:
+                url = f"https://cve.circl.lu/api/cve/{cve_id}"
+            else:
+                url = f"https://cve.circl.lu/api/last/{10}"
+            req = urllib.request.Request(url, headers={"User-Agent": "JARVIS/1.0"})
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+                data = json.loads(resp.read())
+            if cve_id:
+                lines = [f"CVE: {cve_id}", "=" * 40]
+                lines.append(f"Description: {data.get('description', 'N/A')[:500]}")
+                lines.append(f"CVSS Score: {data.get('cvss', 'N/A')}")
+                lines.append(f"Severity: {data.get('access', {}).get('complexity', 'N/A')}")
+                lines.append(f"Published: {data.get('Published', 'N/A')}")
+                lines.append(f"Modified: {data.get('Modified', 'N/A')}")
+                refs = data.get('references', [])
+                if refs:
+                    lines.append(f"References: {len(refs)}")
+                    for r in refs[:5]:
+                        lines.append(f"  • {r[:100]}")
+                return {"success": True, "result": "\n".join(lines)}
+            else:
+                if not isinstance(data, list):
+                    data = []
+                results = []
+                for item in data:
+                    cid = item.get('id', '')
+                    desc = item.get('description', '')[:150]
+                    if keyword.lower() in desc.lower() or keyword.lower() in cid.lower():
+                        results.append(f"  {cid}: {desc}")
+                if results:
+                    return {"success": True, "result": f"Recent CVEs for '{keyword}':\n" + "\n".join(results)}
+                return {"success": True, "result": f"No recent CVEs found for '{keyword}'"}
+        except Exception as e:
+            return {"success": False, "result": f"CVE search error: {e}"}
+
+
+class DNSEnumTool(BaseTool):
+    RECORD_TYPES = ["A", "AAAA", "MX", "NS", "TXT", "SOA", "CNAME", "PTR"]
+
+    def execute(self, params):
+        domain = params.get("domain", params.get("target", "")).strip()
+        types_str = params.get("types", "")
+        if not domain:
+            return {"success": False, "result": "Provide a domain"}
+        types = [t.strip().upper() for t in types_str.split(",") if t.strip()] if types_str else self.RECORD_TYPES
+        lines = [f"DNS Enumeration: {domain}", "=" * 40]
+        try:
+            import dns.resolver
+            resolver = dns.resolver.Resolver()
+            resolver.timeout = 5
+            resolver.lifetime = 5
+            for rtype in types:
+                try:
+                    answers = resolver.resolve(domain, rtype)
+                    lines.append(f"\n{rtype} Records:")
+                    for r in answers:
+                        lines.append(f"  {r}")
+                except dns.resolver.NoAnswer:
+                    lines.append(f"\n{rtype}: No records found")
+                except dns.resolver.NXDOMAIN:
+                    lines.append(f"\n{rtype}: Domain does not exist")
+                except Exception as e:
+                    lines.append(f"\n{rtype}: {e}")
+        except ImportError:
+            # Fallback to socket/dig
+            lines.append("\n(A) Address Records:")
+            try:
+                addrs = socket.getaddrinfo(domain, 0, socket.AF_INET)
+                seen = set()
+                for addr in addrs:
+                    ip = addr[4][0]
+                    if ip not in seen:
+                        lines.append(f"  {ip}")
+                        seen.add(ip)
+            except Exception:
+                lines.append("  Could not resolve")
+            lines.append("\nTip: Install 'dnspython' for full DNS enumeration (MX, NS, TXT, SOA, etc.)")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class MACVendorTool(BaseTool):
+    _OUIS = {
+        "00:00:0C": "Cisco", "00:13:46": "Dell", "00:1A:A0": "HP",
+        "00:1B:21": "Dell", "00:21:5A": "Intel", "00:22:41": "Apple",
+        "00:23:32": "Apple", "00:24:36": "Intel", "00:25:00": "Apple",
+        "00:26:08": "Dell", "00:26:4A": "Juniper", "00:26:BB": "Cisco",
+        "00:30:48": "Dell", "00:50:56": "VMware", "00:50:79": "VMware",
+        "00:55:DA": "Apple", "04:4B:ED": "Samsung", "08:00:27": "Oracle/VirtualBox",
+        "08:00:46": "Intel", "08:74:02": "Apple", "0C:9D:92": "Broadcom",
+        "10:08:B1": "HP", "14:10:9F": "Apple", "18:66:DA": "Apple",
+        "1C:B0:44": "Dell", "20:C9:D0": "Apple", "24:4B:FE": "Dell",
+        "28:F0:76": "Apple", "2C:33:61": "Apple", "2C:54:CF": "Intel",
+        "30:46:9A": "Apple", "34:15:9E": "HP", "3C:07:54": "Intel",
+        "3C:D9:2B": "HP", "40:8D:5C": "Intel", "44:38:39": "Cisco",
+        "44:45:53": "ESP", "48:45:20": "Intel", "4C:32:75": "Dell",
+        "50:3E:AA": "Cisco", "54:33:CB": "Intel", "54:52:00": "Linux Foundation",
+        "58:55:CA": "Apple", "5C:26:0A": "Dell", "60:57:18": "Cisco",
+        "64:9E:F3": "Dell", "68:05:CA": "Intel", "6C:2B:59": "Intel",
+        "6C:3B:6B": "Google", "70:4D:7B": "Apple", "74:00:00": "Google",
+        "78:31:C1": "Cisco", "7C:05:07": "Intel", "80:00:0B": "HP",
+        "84:7B:5B": "Intel", "88:66:5A": "HP", "8C:85:90": "Intel",
+        "90:0C:A7": "Apple", "94:65:2D": "Apple", "98:01:A7": "Dell",
+        "9C:2E:A1": "Cisco", "A0:99:9B": "Intel", "A4:5E:60": "Dell",
+        "A8:20:66": "HP", "AC:BC:32": "Apple", "B0:6C:BF": "Intel",
+        "B4:2E:99": "Intel", "B8:27:EB": "Raspberry Pi", "BC:5F:F4": "Cisco",
+        "C0:25:A5": "Apple", "C8:69:CD": "Intel", "CC:2F:71": "Dell",
+        "D0:37:45": "Apple", "D4:61:2C": "HP", "D8:5D:E2": "Intel",
+        "DC:FB:02": "Apple", "E0:2A:82": "Intel", "E0:AC:CB": "Apple",
+        "E4:A7:A0": "Dell", "E8:50:8B": "Cisco", "EC:F0:0E": "Apple",
+        "F0:18:98": "Microsoft", "F4:4E:05": "Dell", "F8:FF:C2": "Apple",
+        "FC:AA:14": "Cisco", "FE:FF:FF": "Local", "00:1A:11": "Google",
+        "00:25:90": "Microsoft", "00:26:AB": "Intel", "34:DE:1A": "Intel",
+        "40:B0:FA": "Intel", "50:F5:DA": "Apple", "A0:ED:CD": "Intel",
+        "B0:7D:64": "Apple", "C8:B3:A7": "Apple", "E8:B2:AC": "Intel",
+        "F0:27:65": "Synology", "F4:4D:30": "Intel", "00:1E:C2": "Apple",
+    }
+
+    def execute(self, params):
+        mac = params.get("mac", params.get("address", "")).strip().upper()
+        if not mac:
+            return {"success": False, "result": "Provide a MAC address (e.g., 00:1A:2B:3C:4D:5E)"}
+        mac_clean = re.sub(r'[^A-F0-9]', '', mac)
+        if len(mac_clean) != 12:
+            return {"success": False, "result": "MAC address must be 6 hex bytes (12 hex digits)"}
+        oui = ":".join(mac_clean[i:i+2] for i in range(0, 6, 2))
+        oui_prefix = mac_clean[:6]
+        vendor = self._OUIS.get(oui, self._OUIS.get(oui_prefix, "Unknown"))
+        formatted = ":".join(mac_clean[i:i+2] for i in range(0, 12, 2))
+        return {"success": True, "result":
+                f"MAC: {formatted}\nOUI: {oui}\nVendor: {vendor}\n"
+                f"Type: {'Unicast' if int(mac_clean[1], 16) % 2 == 0 else 'Multicast'}\n"
+                f"Global: {'Yes' if int(mac_clean[0], 16) & 2 == 0 else 'Local (not globally unique)'}"}
+
+
+class FileAnalyzerTool(BaseTool):
+    _MAGIC = {
+        b'\x89PNG\r\n\x1a\n': "PNG Image", b'\xff\xd8\xff': "JPEG Image",
+        b'GIF87a': "GIF Image", b'GIF89a': "GIF Image", b'%PDF': "PDF Document",
+        b'PK\x03\x04': "ZIP Archive / Office Document", b'PK\x05\x06': "ZIP Archive (Empty)",
+        b'\x1f\x8b\x08': "GZIP Archive", b'BZh': "BZIP2 Archive",
+        b'\x1f\x9d': "TAR Archive (Compress)", b'\xfd7zXZ\x00': "XZ Archive",
+        b'RIFF': "AVI / WAV (RIFF container)", b'MZ': "Windows Executable (PE)",
+        b'\x7fELF': "ELF Binary (Linux)", b'!<arch>\n': "AR Archive",
+        b'\xca\xfe\xba\xbe': "Java Class File", b'%!PS': "PostScript",
+        b'{\\rtf': "RTF Document", b'\xef\xbb\xbf': "UTF-8 BOM Text",
+        b'\xff\xfe': "UTF-16 LE Text", b'\xfe\xff': "UTF-16 BE Text",
+        b'BM': "BMP Image", b'\x00\x00\x01\x00': "ICO Icon",
+        b'Rar!\x1a\x07': "RAR Archive", b'\x1a\x45\xdf\xa3': "MKV/WebM Video",
+        b'OggS': "OGG Container", b'\x00\x01\x00\x00\x00': "TTF Font",
+    }
+
+    def execute(self, params):
+        action = params.get("action", "analyze")
+        path = params.get("path", params.get("file", ""))
+        if not path or not os.path.exists(path):
+            return {"success": False, "result": "Provide a valid file path"}
+        try:
+            if action == "analyze":
+                stat = os.stat(path)
+                size = stat.st_size
+                lines = [f"File Analysis: {os.path.basename(path)}", "=" * 40]
+                lines.append(f"Path: {path}")
+                lines.append(f"Size: {_format_size(size)} ({size:,} bytes)")
+                lines.append(f"Modified: {_format_time(stat.st_mtime)}")
+                with open(path, 'rb') as f:
+                    header = f.read(16)
+                # Detect magic bytes
+                magic_detected = "Unknown"
+                for sig, desc in self._MAGIC.items():
+                    if header[:len(sig)] == sig:
+                        magic_detected = desc
+                        break
+                lines.append(f"File Type: {magic_detected}")
+                lines.append(f"Magic Bytes: {' '.join(f'{b:02x}' for b in header[:8])}")
+                ext = os.path.splitext(path)[1].lower()
+                lines.append(f"Extension: {ext or '(none)'}")
+                # Entropy calculation
+                with open(path, 'rb') as f:
+                    data = f.read()
+                entropy = 0.0
+                if data:
+                    freq = [0] * 256
+                    for b in data:
+                        freq[b] += 1
+                    for f in freq:
+                        if f > 0:
+                            p = f / len(data)
+                            entropy -= p * math.log2(p)
+                lines.append(f"Entropy: {entropy:.3f} (max 8.0, higher = more random/encrypted)")
+                if entropy > 7.5:
+                    lines.append("  ⚠ High entropy — likely encrypted, compressed, or random data")
+                elif entropy > 6.0:
+                    lines.append("  Note: Moderate entropy")
+                # Check for suspicious strings
+                suspicious_strs = [b'<script>', b'eval(', b'base64_decode', b'exec(',
+                                   b'system(', b'passthru(', b'shell_exec(', b'wget ',
+                                   b'curl ', b'chmod +x', b'/etc/passwd', b'cmd.exe',
+                                   b'powershell', b'Invoke-', b'MZ']
+                found_suspicious = []
+                for sig in suspicious_strs:
+                    if sig in data[:min(len(data), 100000)]:
+                        found_suspicious.append(sig.decode('utf-8', errors='replace'))
+                if found_suspicious:
+                    lines.append(f"\n⚠ Suspicious patterns: {', '.join(found_suspicious[:10])}")
+                return {"success": True, "result": "\n".join(lines)}
+            elif action == "strings":
+                count = min(int(params.get("count", 50)), 200)
+                min_len = int(params.get("min_len", 4))
+                with open(path, 'rb') as f:
+                    data = f.read()
+                strings_list = re.findall(rb'[\x20-\x7e]{%d,}' % min_len, data)
+                printable = []
+                for s in strings_list:
+                    try:
+                        printable.append(s.decode('ascii'))
+                    except Exception:
+                        pass
+                printable = printable[:count]
+                lines = [f"Strings in {os.path.basename(path)} ({len(printable)} shown):"]
+                for s in printable:
+                    if s.strip():
+                        lines.append(f"  {s[:120]}")
+                return {"success": True, "result": "\n".join(lines)}
+            return {"success": False, "result": "Actions: analyze, strings"}
+        except Exception as e:
+            return {"success": False, "result": f"File analysis error: {e}"}
+
+
+class CipherTool(BaseTool):
+    def execute(self, params):
+        action = params.get("action", "caesar")
+        text = params.get("text", "")
+        shift = int(params.get("shift", 3))
+        key_str = params.get("key", "key")
+        if not text:
+            return {"success": False, "result": "Provide text to encrypt/decrypt"}
+        if action == "caesar":
+            result = ""
+            for c in text:
+                if c.isalpha():
+                    base = ord('A') if c.isupper() else ord('a')
+                    result += chr((ord(c) - base + shift) % 26 + base)
+                else:
+                    result += c
+            return {"success": True, "result": f"Caesar (shift={shift}):\n{text}\n→ {result}"}
+        elif action == "rot13":
+            result = text.translate(str.maketrans(
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+                "NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm"))
+            return {"success": True, "result": f"ROT13:\n{text}\n→ {result}"}
+        elif action == "xor":
+            key = key_str
+            result_bytes = bytearray()
+            for i, b in enumerate(text.encode('utf-8')):
+                result_bytes.append(b ^ ord(key[i % len(key)]))
+            try:
+                result = result_bytes.decode('utf-8')
+            except Exception:
+                result = result_bytes.hex()
+            return {"success": True, "result": f"XOR (key='{key}'):\n{text}\n→ {result}"}
+        elif action == "vigenere":
+            key = key_str.upper()
+            if not key:
+                return {"success": False, "result": "Provide a key for Vigenère"}
+            result = ""
+            ki = 0
+            for c in text:
+                if c.isalpha():
+                    base = ord('A') if c.isupper() else ord('a')
+                    shift_k = ord(key[ki % len(key)].upper()) - ord('A')
+                    result += chr((ord(c) - base + shift_k) % 26 + base)
+                    ki += 1
+                else:
+                    result += c
+            return {"success": True, "result": f"Vigenère (key='{key}'):\n{text}\n→ {result}"}
+        elif action == "atbash":
+            result = ""
+            for c in text:
+                if c.isalpha():
+                    base = ord('A') if c.isupper() else ord('a')
+                    result += chr(base + (25 - (ord(c) - base)))
+                else:
+                    result += c
+            return {"success": True, "result": f"Atbash:\n{text}\n→ {result}"}
+        return {"success": False, "result": "Actions: caesar, rot13, xor, vigenere, atbash"}
+
+
+class LogParserTool(BaseTool):
+    def execute(self, params):
+        text = params.get("text", params.get("log", ""))
+        fmt = params.get("format", params.get("type", "auto")).lower()
+        if not text:
+            return {"success": False, "result": "Provide log text to parse"}
+        lines = text.strip().split("\n")
+        parsed = []
+        if fmt in ("auto", "apache", "nginx", "web"):
+            pattern = r'(\S+)\s+\S+\s+\S+\s+\[([^\]]+)\]\s+"([^"]*)"\s+(\d+)\s+(\S+)'
+            for line in lines:
+                m = re.match(pattern, line)
+                if m:
+                    parsed.append(f"IP: {m.group(1)} | [{m.group(2)}] | \"{m.group(3)}\" | {m.group(4)} | {m.group(5)}")
+        if fmt in ("auto", "syslog"):
+            pattern = r'(\w{3}\s+\d+\s+\d+:\d+:\d+)\s+(\S+)\s+(\S+)(?:\s+(\S+))?\s+(.*)'
+            for line in lines:
+                m = re.match(pattern, line)
+                if m:
+                    parsed.append(f"[{m.group(1)}] {m.group(2)} {m.group(3)}: {m.group(5)}")
+        if fmt in ("auto", "csv", "auth"):
+            for line in lines:
+                if "Failed password" in line:
+                    m = re.search(r'FROM (\S+)', line)
+                    ip = m.group(1) if m else "?"
+                    m2 = re.search(r'for\s+(\S+)', line)
+                    user = m2.group(1) if m2 else "?"
+                    parsed.append(f"⚠ Failed auth: user={user} from={ip}")
+                elif "Accepted password" in line:
+                    m = re.search(r'for\s+(\S+)', line)
+                    user = m.group(1) if m else "?"
+                    m2 = re.search(r'FROM (\S+)', line)
+                    ip = m2.group(1) if m2 else "?"
+                    parsed.append(f"✓ Successful auth: user={user} from={ip}")
+        if not parsed:
+            parsed = [f"Log entry ({len(lines)} lines): Unable to auto-parse. Specify format=apache, syslog, or csv"]
+        result_lines = [f"Log Analysis ({len(lines)} lines, {len(parsed)} parsed):", "=" * 40]
+        result_lines.extend(parsed[:30])
+        if len(parsed) > 30:
+            result_lines.append(f"... and {len(parsed) - 30} more entries")
+        return {"success": True, "result": "\n".join(result_lines)}
+
+
+class NetworkMapperTool(BaseTool):
+    def execute(self, params):
+        subnet = params.get("subnet", params.get("target", "")).strip()
+        timeout_f = max(1, min(float(params.get("timeout", 2)), 10))
+        if not subnet:
+            return {"success": False, "result": "Provide subnet (e.g., 192.168.1.0/24)"}
+        try:
+            import ipaddress
+            network = ipaddress.ip_network(subnet, strict=False)
+        except Exception:
+            return {"success": False, "result": f"Invalid subnet: {subnet}"}
+        hosts = list(network.hosts())[:255]
+        active = []
+        for host in hosts[:50]:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(timeout_f)
+                ip_str = str(host)
+                # Try common ports to determine if host is up
+                for port in [80, 443, 22, 445, 135]:
+                    result = s.connect_ex((ip_str, port))
+                    if result == 0:
+                        try:
+                            hostname = socket.gethostbyaddr(ip_str)[0]
+                        except Exception:
+                            hostname = ip_str
+                        service = {80: "HTTP", 443: "HTTPS", 22: "SSH", 445: "SMB", 135: "RPC"}.get(port, str(port))
+                        active.append(f"  {ip_str:16s}  {hostname:30s}  {service}")
+                        break
+                s.close()
+            except Exception:
+                pass
+        lines = [f"Network Map: {subnet}", "=" * 40]
+        if active:
+            lines.append(f"Active hosts ({len(active)} found):")
+            lines.append("  IP               Hostname                       Service")
+            lines.append("  " + "-" * 60)
+            lines.extend(active)
+        else:
+            lines.append("No active hosts found (scanned first 50 IPs)")
+            lines.append("Tip: Increase timeout or specify a narrower range")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class UserEnumTool(BaseTool):
+    _PLATFORMS = {
+        "GitHub": "https://github.com/{user}",
+        "Twitter/X": "https://twitter.com/{user}",
+        "Reddit": "https://reddit.com/user/{user}",
+        "Keybase": "https://keybase.io/{user}",
+        "Instagram": "https://instagram.com/{user}",
+        "Medium": "https://medium.com/@{user}",
+        "PyPI": "https://pypi.org/user/{user}/",
+        "HackerNews": "https://news.ycombinator.com/user?id={user}",
+    }
+
+    def execute(self, params):
+        username = params.get("username", params.get("user", "")).strip()
+        platforms_str = params.get("platforms", "")
+        if not username:
+            return {"success": False, "result": "Provide a username to search"}
+        platforms = self._PLATFORMS
+        if platforms_str:
+            filtered = {}
+            for p in platforms_str.split(","):
+                p = p.strip()
+                if p in self._PLATFORMS:
+                    filtered[p] = self._PLATFORMS[p]
+            if filtered:
+                platforms = filtered
+        lines = [f"Username Search: '{username}'", "=" * 40]
+        for name, url in platforms.items():
+            try:
+                req = urllib.request.Request(url.format(user=username),
+                                            headers={"User-Agent": "Mozilla/5.0"})
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                try:
+                    with urllib.request.urlopen(req, timeout=5, context=ctx) as resp:
+                        if resp.status == 200:
+                            lines.append(f"  ✓ {name}: Profile exists")
+                        else:
+                            lines.append(f"  ? {name}: Status {resp.status}")
+                except urllib.error.HTTPError as e:
+                    if e.code == 404:
+                        lines.append(f"  ✗ {name}: Not found")
+                    elif e.code == 403:
+                        lines.append(f"  ? {name}: Blocked (403)")
+                    else:
+                        lines.append(f"  ? {name}: HTTP {e.code}")
+                except urllib.error.URLError:
+                    lines.append(f"  ? {name}: Connection failed")
+            except Exception:
+                lines.append(f"  ? {name}: Error")
+        return {"success": True, "result": "\n".join(lines) + "\n\nOSINT Tip: Check Sherlock or Maigret for 400+ site checks"}
+
+
+class ExploitSearchTool(BaseTool):
+    def execute(self, params):
+        query = params.get("query", params.get("search", "")).strip()
+        cve = params.get("cve", "").strip()
+        if not query and not cve:
+            return {"success": False, "result": "Provide a search query (software name) or CVE ID"}
+        lines = []
+        try:
+            url = f"https://www.exploit-db.com/search?q={urllib.parse.quote(query or cve)}"
+            lines.append(f"Online exploit search for: {query or cve}")
+            lines.append(f"Search URL: {url}")
+            # Try to fetch exploit results from a free API
+            api_url = f"https://cve.circl.lu/api/last/{20}"
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(api_url, headers={"User-Agent": "JARVIS/1.0"})
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+                cves = json.loads(resp.read())
+            found = []
+            for item in cves if isinstance(cves, list) else []:
+                cid = item.get('id', '')
+                desc = item.get('description', '')[:200]
+                if query.lower() in desc.lower() or query.lower() in cid.lower() or cve.lower() in cid.lower():
+                    found.append(f"  {cid}: {desc[:150]}")
+            if found:
+                lines.append(f"\nRecent relevant CVEs ({len(found)}):")
+                lines.extend(found)
+            else:
+                lines.append("\nNo recent CVEs found. Check exploit-db.com for the latest exploits.")
+            return {"success": True, "result": "\n".join(lines)}
+        except Exception as e:
+            return {"success": False, "result": f"Exploit search error: {e}"}
+
+
+class PhishingDetectorTool(BaseTool):
+    def execute(self, params):
+        text = params.get("text", params.get("email", ""))
+        url = params.get("url", "")
+        if not text and not url:
+            return {"success": False, "result": "Provide email content or URL to check"}
+        warnings = []
+        info = []
+        score = 0
+        if url:
+            # Run URL analysis
+            url_lower = url.lower()
+            parsed = urllib.parse.urlparse(url if "://" in url else "//" + url)
+            domain = parsed.netloc or parsed.path.split("/")[0]
+            suspicious_tlds = [".tk", ".ml", ".ga", ".cf", ".gq", ".xyz", ".top", ".cam", ".click", ".download"]
+            for tld in suspicious_tlds:
+                if domain.endswith(tld):
+                    warnings.append(f"Suspicious TLD: {tld}")
+                    score += 2
+            phishing_keywords = ["login", "verify", "account", "update", "confirm", "secure",
+                                 "bank", "paypal", "password", "credential", "auth", "reset"]
+            found_kw = [k for k in phishing_keywords if k in url_lower]
+            if found_kw:
+                warnings.append(f"Phishing keywords: {', '.join(found_kw)}")
+                score += 2
+            if "@" in url_lower:
+                warnings.append("'@' symbol hides real domain")
+                score += 3
+            if not url_lower.startswith("https://"):
+                warnings.append("No HTTPS")
+                score += 1
+            info.append(f"Domain: {domain}")
+        if text:
+            # Check email content
+            text_lower = text.lower()
+            urgency_words = ["urgent", "immediately", "action required", "account suspended",
+                             "limited time", "click here", "verify now", "security alert",
+                             "unauthorized login", "unusual activity", "confirm your account"]
+            found_urg = [w for w in urgency_words if w in text_lower]
+            if found_urg:
+                warnings.append(f"Urgency/social engineering: {', '.join(found_urg)}")
+                score += len(found_urg)
+            if "Dear" not in text and "Hi" not in text[:50]:
+                if "valued" not in text_lower[:100]:
+                    warnings.append("Generic greeting (no personalization)")
+                    score += 1
+            # Check for suspicious links
+            links = re.findall(r'https?://[^\s<>"\']+', text)
+            for link in links:
+                if not link.startswith("https://"):
+                    warnings.append(f"Non-HTTPS link: {link[:60]}")
+                    score += 1
+            # Check for poor grammar/spelling
+            grammar_indicators = ["congrates", "congo", "fellow", "kindly", "dearly", "we have been trying"]
+            for g in grammar_indicators:
+                if g in text_lower:
+                    warnings.append(f"Common phishing phrasing: '{g}'")
+                    score += 1
+            # Check for mismatched sender/domain
+            sender_domains = re.findall(r'@(\S+\.\S+)', text)
+            link_domains = re.findall(r'https?://([^/\s]+)', text)
+            for sd in sender_domains:
+                for ld in link_domains:
+                    if sd and ld and sd not in ld and ld not in sd:
+                        if sd.split(".")[-2:] != ld.split(".")[-2:]:
+                            warnings.append(f"Mismatch: sender @{sd} links to {ld}")
+                            score += 3
+        lines = [f"Phishing Analysis", "=" * 40]
+        if url:
+            lines.append(f"URL: {url[:100]}")
+        if text:
+            lines.append(f"Content: {len(text)} chars")
+        level = "HIGH" if score >= 6 else ("MEDIUM" if score >= 3 else "LOW")
+        lines.append(f"\nRisk Score: {score}/20 | Threat Level: {level}")
+        if warnings:
+            lines.append(f"\n⚠ Warnings ({len(warnings)}):")
+            for w in warnings:
+                lines.append(f"  • {w}")
+        else:
+            lines.append("\n✓ No obvious phishing indicators detected")
+        if info:
+            lines.append(f"\nInfo:")
+            for i in info:
+                lines.append(f"  • {i}")
+        from urllib.parse import urlparse, parse_qs
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class HashIdentifierTool(BaseTool):
+    _PATTERNS = [
+        (r'^[a-f0-9]{32}$', 'MD5', 'MD5 hash (128 bits, 32 hex chars)'),
+        (r'^[a-f0-9]{40}$', 'SHA-1', 'SHA-1 hash (160 bits, 40 hex chars)'),
+        (r'^[a-f0-9]{56}$', 'SHA-224', 'SHA-224 hash (224 bits, 56 hex chars)'),
+        (r'^[a-f0-9]{64}$', 'SHA-256', 'SHA-256 hash (256 bits, 64 hex chars)'),
+        (r'^[a-f0-9]{96}$', 'SHA-384', 'SHA-384 hash (384 bits, 96 hex chars)'),
+        (r'^[a-f0-9]{128}$', 'SHA-512', 'SHA-512 hash (512 bits, 128 hex chars)'),
+        (r'^\$2[ayb]\$\d{2}\$[A-Za-z0-9./]{53}$', 'bcrypt', 'bcrypt hash (60 chars)'),
+        (r'^\$5\$\w{16}\$[A-Za-z0-9./]{43}$', 'SHA-256-Crypt', 'Linux SHA-256 crypt'),
+        (r'^\$6\$\w{16}\$[A-Za-z0-9./]{86}$', 'SHA-512-Crypt', 'Linux SHA-512 crypt'),
+        (r'^[a-f0-9]{32}:[a-f0-9]{32}$', 'LM:NTLM', 'Windows LM:NTLM hash pair'),
+        (r'^[0-9a-f]{32}:\w+$', 'NTLM:Username', 'NTLM hash with username'),
+        (r'^[A-Za-z0-9+/]{32}={0,2}$', 'NTLM (base64)', 'NTLM hash in base64'),
+        (r'^\d+:[a-f0-9]{32}:[a-f0-9]{32}:[a-f0-9]{32}:[a-f0-9]{32}:[a-f0-9]{32}:[a-f0-9]{32}:.+$',
+         'Shadow File', '/etc/shadow entry'),
+        (r'^[A-Za-z0-9+/]{40}={0,2}$', 'SHA-1 (base64)', 'SHA-1 in base64'),
+        (r'^[A-Za-z0-9+/]{64}={0,2}$', 'SHA-256 (base64)', 'SHA-256 in base64'),
+        (r'^[A-Za-z0-9+/]{88}={0,2}$', 'SHA-512 (base64)', 'SHA-512 in base64'),
+    ]
+
+    def execute(self, params):
+        hash_str = params.get("hash", "").strip()
+        if not hash_str:
+            return {"success": False, "result": "Provide a hash string to identify"}
+        hash_clean = hash_str.strip().lower()
+        lines = [f"Hash Identification: {hash_str[:80]}", "=" * 40]
+        matches = []
+        for pattern, name, desc in self._PATTERNS:
+            if re.match(pattern, hash_clean) or re.match(pattern, hash_str):
+                matches.append((name, desc))
+        if matches:
+            lines.append(f"Matched {len(matches)} pattern(s):")
+            for name, desc in matches:
+                lines.append(f"  • {name}: {desc}")
+        else:
+            length = len(hash_str)
+            lines.append("No specific pattern matched.")
+            lines.append(f"Length: {length} characters")
+            if length == 32:
+                lines.append("Could be: MD5 or MD4")
+            elif length == 40:
+                lines.append("Could be: SHA-1")
+            elif length == 64:
+                lines.append("Could be: SHA-256")
+            elif length == 128:
+                lines.append("Could be: SHA-512")
+            else:
+                lines.append("Unknown hash type")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class PasswordAuditorTool(BaseTool):
+    COMMON_PASSWORDS = ["123456", "password", "qwerty", "abc123", "letmein", "welcome",
+                        "monkey", "dragon", "master", "login", "admin", "sunshine",
+                        "princess", "football", "iloveyou", "trustno1", "cheese",
+                        "shadow", "baseball", "charlie", "donald", "password1",
+                        "qwerty123", "123456789", "111111", "000000"]
+
+    def execute(self, params):
+        password = params.get("password", "").strip()
+        if not password:
+            return {"success": False, "result": "Provide a password to audit"}
+        issues = []
+        score = 0
+        length = len(password)
+        # Length checks
+        if length < 8:
+            issues.append("Too short (< 8 chars)")
+            score -= 20
+        elif length < 12:
+            issues.append("Moderate length (8-11 chars, aim for 12+)")
+            score += 10
+        elif length < 16:
+            score += 20
+        else:
+            score += 30
+        # Character variety
+        has_upper = bool(re.search(r'[A-Z]', password))
+        has_lower = bool(re.search(r'[a-z]', password))
+        has_digit = bool(re.search(r'[0-9]', password))
+        has_special = bool(re.search(r'[^A-Za-z0-9]', password))
+        variety = sum([has_upper, has_lower, has_digit, has_special])
+        if variety >= 4:
+            score += 25
+            issues.append("Excellent: uses all character types")
+        elif variety >= 3:
+            score += 15
+            issues.append("Good: uses 3/4 character types")
+        elif variety >= 2:
+            score += 5
+            issues.append("Add more character types")
+        else:
+            score -= 10
+            issues.append("Weak: only one character type")
+        # Entropy estimate
+        charset_size = 0
+        if has_lower:
+            charset_size += 26
+        if has_upper:
+            charset_size += 26
+        if has_digit:
+            charset_size += 10
+        if has_special:
+            charset_size += 32
+        if charset_size > 0:
+            entropy_bits = length * math.log2(charset_size)
+            if entropy_bits < 28:
+                issues.append("Very low entropy (easily crackable)")
+                score -= 20
+            elif entropy_bits < 36:
+                issues.append("Low entropy")
+                score -= 10
+            elif entropy_bits < 60:
+                issues.append("Moderate entropy")
+                score += 10
+            else:
+                issues.append("Good entropy")
+                score += 20
+        # Check common passwords
+        if password.lower() in self.COMMON_PASSWORDS:
+            issues.append("⚠ This password is in the top 25 most common passwords!")
+            score = -50
+        # Check keyboard patterns
+        if re.search(r'(qwert|asdf|zxcv|1234|abcd|passw|qwer)', password.lower()):
+            issues.append("Keyboard pattern or common sequence detected")
+            score -= 15
+        # Check repeated chars
+        if re.search(r'(.)\1{2,}', password):
+            issues.append("Repeated characters (e.g., 'aaa')")
+            score -= 10
+        score = max(0, min(100, score))
+        rating = "STRONG" if score >= 80 else ("GOOD" if score >= 60 else
+                  ("FAIR" if score >= 40 else "WEAK"))
+        lines = [
+            f"Password Audit", "=" * 40,
+            f"Password: {'*' * length} ({length} chars)",
+            f"Score: {score}/100 | Rating: {rating}",
+            f"\nCharacter Types:",
+            f"  Uppercase: {'✓' if has_upper else '✗'}",
+            f"  Lowercase: {'✓' if has_lower else '✗'}",
+            f"  Digits:    {'✓' if has_digit else '✗'}",
+            f"  Special:   {'✓' if has_special else '✗'}",
+            f"  Variety:   {variety}/4",
+        ]
+        if entropy_bits > 0:
+            lines.append(f"  Entropy:   {entropy_bits:.1f} bits")
+        lines.append(f"\nAnalysis:")
+        for issue in issues:
+            lines.append(f"  • {issue}")
+        lines.append(f"\nTips:")
+        lines.append("  • Use 12+ characters with all 4 types")
+        lines.append("  • Avoid dictionary words and patterns")
+        lines.append("  • Use a password manager")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class ThreatIntelTool(BaseTool):
+    def execute(self, params):
+        target = params.get("target", "").strip()
+        target_type = params.get("type", "auto").lower()
+        if not target:
+            return {"success": False, "result": "Provide an IP, domain, hash, or URL"}
+        lines = [f"Threat Intelligence Report", "=" * 40,
+                 f"Target: {target}", f"Type: {target_type}", ""]
+        # Determine target type
+        if target_type == "auto":
+            if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', target):
+                target_type = "ip"
+            elif "." in target and " " not in target:
+                target_type = "domain"
+            elif re.match(r'^[a-f0-9]{32,128}$', target, re.I):
+                target_type = "hash"
+            else:
+                target_type = "text"
+        if target_type == "ip":
+            lines.append("IP Analysis:")
+            try:
+                hostname = socket.gethostbyaddr(target)[0]
+                lines.append(f"  PTR: {hostname}")
+            except Exception:
+                pass
+            try:
+                req = urllib.request.Request(f"https://ipapi.co/{target}/json/",
+                                            headers={"User-Agent": "JARVIS/1.0"})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read())
+                lines.append(f"  Location: {data.get('city','?')}, {data.get('country_name','?')}")
+                lines.append(f"  ISP: {data.get('org', data.get('isp', '?'))}")
+            except Exception:
+                pass
+            lines.append("\n  Check: abuseipdb.com, virustotal.com, shodan.io")
+        elif target_type == "domain":
+            lines.append("Domain Analysis:")
+            try:
+                ip = socket.gethostbyname(target)
+                lines.append(f"  Resolves to: {ip}")
+            except Exception:
+                lines.append("  Cannot resolve")
+            lines.append("\n  Check: virustotal.com, urlscan.io, whois.domaintools.com")
+        elif target_type == "hash":
+            lines.append("Hash Analysis:")
+            length = len(target)
+            lines.append(f"  Length: {length} hex chars")
+            if length == 32:
+                lines.append("  Type: MD5")
+            elif length == 40:
+                lines.append("  Type: SHA-1")
+            elif length == 64:
+                lines.append("  Type: SHA-256")
+            elif length == 128:
+                lines.append("  Type: SHA-512")
+            else:
+                lines.append("  Type: Unknown")
+            lines.append("\n  Check: virustotal.com (search hash)")
+        else:
+            lines.append("Text/IOC Analysis:")
+            urls = re.findall(r'https?://[^\s]+', target)
+            ips = re.findall(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', target)
+            hashes = re.findall(r'[a-fA-F0-9]{32,}', target)
+            if urls:
+                lines.append(f"  URLs found: {len(urls)}")
+            if ips:
+                lines.append(f"  IPs found: {len(ips)}")
+            if hashes:
+                lines.append(f"  Hashes found: {len(hashes)}")
+        lines.append("\n=== End of Report ===")
+        return {"success": True, "result": "\n".join(lines)}
+
+
 def create_default_registry():
     registry = ToolRegistry()
     registry.register("web_search", WebSearchTool())
@@ -5734,4 +6863,25 @@ def create_default_registry():
     registry.register("cheat_sheet", CheatSheetTool())
     registry.register("concept_map", ConceptMapTool())
     registry.register("quiz_me", QuizMeTool())
+    # Cybersecurity Tools (20)
+    registry.register("port_scanner", PortScannerTool())
+    registry.register("subdomain_scan", SubdomainEnumTool())
+    registry.register("whois_lookup", WhoisTool())
+    registry.register("ssl_inspector", SSLInspectorTool())
+    registry.register("http_headers", HTTPHeadersTool())
+    registry.register("url_analyzer", URLAnalyzerTool())
+    registry.register("ip_reputation", IPReputationTool())
+    registry.register("cve_search", CVESearchTool())
+    registry.register("dns_enum", DNSEnumTool())
+    registry.register("mac_vendor", MACVendorTool())
+    registry.register("file_analyzer", FileAnalyzerTool())
+    registry.register("cipher", CipherTool())
+    registry.register("log_parser", LogParserTool())
+    registry.register("network_map", NetworkMapperTool())
+    registry.register("user_enum", UserEnumTool())
+    registry.register("exploit_search", ExploitSearchTool())
+    registry.register("phishing_detector", PhishingDetectorTool())
+    registry.register("hash_id", HashIdentifierTool())
+    registry.register("password_audit", PasswordAuditorTool())
+    registry.register("threat_intel", ThreatIntelTool())
     return registry
