@@ -9,12 +9,16 @@ echo.
 python -m pip install --upgrade pip
 
 :: Core dependencies
-echo [1/2] Installing core packages...
+echo [1/3] Installing core packages...
 pip install requests urllib3 edge-tts pyttsx3 pywin32 comtypes ddgs
 
+:: Optional: System monitoring & UI
+echo [2/3] Installing system & UI packages...
+pip install psutil pyautogui pyperclip qrcode[pil] Pillow
+
 :: Optional: Wake word listener
-echo [2/2] Installing wake word support...
-pip install numpy sounddevice SpeechRecognition
+echo [3/3] Installing wake word & misc...
+pip install numpy sounddevice SpeechRecognition dnspython jsonpath-ng mss
 
 echo.
 echo ========================================

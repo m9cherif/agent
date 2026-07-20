@@ -31,7 +31,14 @@ python3 -m pip install --quiet \
     ddgs \
     numpy \
     sounddevice \
-    SpeechRecognition
+    SpeechRecognition \
+    psutil \
+    pyautogui \
+    pyperclip \
+    Pillow \
+    dnspython \
+    jsonpath-ng \
+    mss
 
 echo ""
 echo "========================================"

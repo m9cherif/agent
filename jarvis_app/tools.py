@@ -3458,7 +3458,7 @@ class EquationSolveTool(BaseTool):
 
 
 # ════════════════════════════════════════════
-# Student & Teacher Tools (53 tools)
+# Student & Teacher Tools (73 tools)
 # ════════════════════════════════════════════
 
 _STUDY_DIR = os.path.join(os.path.expanduser("~"), ".jarvis_study")
@@ -5570,12 +5570,815 @@ class QuizMeTool(BaseTool):
 
 
 # ════════════════════════════════════════════
-# Cybersecurity Tools (20 tools)
+# Student & Teacher Tools batch 3 (20 tools — 93 total student/teacher)
 # ════════════════════════════════════════════
 
+class PlagiarismCheckTool(BaseTool):
+    def execute(self, params):
+        text1 = params.get("text1", params.get("first", "")).strip()
+        text2 = params.get("text2", params.get("second", "")).strip()
+        if not text1 or not text2:
+            return {"success": False, "result": "Provide text1 and text2 to compare"}
+        def normalize(t):
+            return re.sub(r'[^a-z0-9 ]', '', t.lower()).split()
+        words1 = normalize(text1)
+        words2 = normalize(text2)
+        if not words1 or not words2:
+            return {"success": False, "result": "Need at least some words in both texts"}
+        set1, set2 = set(words1), set(words2)
+        intersection = set1 & set2
+        union = set1 | set2
+        jaccard = len(intersection) / len(union) * 100 if union else 0
+        common_phrases = []
+        for i in range(len(words1) - 2):
+            phrase = " ".join(words1[i:i+3])
+            if phrase in " ".join(words2):
+                common_phrases.append(phrase)
+        lines = [f"Plagiarism / Similarity Check", "=" * 40]
+        lines.append(f"Text 1: {len(words1)} words")
+        lines.append(f"Text 2: {len(words2)} words")
+        lines.append(f"Vocab Overlap: {len(intersection)}/{len(union)} words")
+        lines.append(f"Jaccard Similarity: {jaccard:.1f}%")
+        lines.append(f"Matching 3+ word phrases: {len(common_phrases)}")
+        if common_phrases:
+            lines.append("\nMatching phrases:")
+            for p in common_phrases[:15]:
+                lines.append(f"  \"{p}\"")
+        if jaccard > 70:
+            lines.append("\n⚠ High similarity — texts may be plagiarized")
+        elif jaccard > 40:
+            lines.append("\n⚠ Moderate similarity — review for proper citation")
+        else:
+            lines.append("\n✓ Low similarity")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class PeerReviewTool(BaseTool):
+    def execute(self, params):
+        assignment = params.get("assignment", params.get("title", "Assignment"))
+        criteria_str = params.get("criteria", "Clarity,Accuracy,Depth,Citations")
+        criteria = [c.strip() for c in criteria_str.split(",") if c.strip()]
+        lines = [f"Peer Review Form: {assignment}", "=" * 40, "",
+                 "Reviewer: ____________________  Author: ____________________\n"]
+        for c in criteria:
+            lines.append(f"{c}:")
+            lines.append(f"  Score (1-5): ___  Comments: _____________________________")
+            lines.append("")
+        lines.append("Overall Assessment:")
+        lines.append("  Strengths: _______________________________________________")
+        lines.append("  Areas for Improvement: ___________________________________")
+        lines.append("  Additional Comments: _____________________________________")
+        lines.append("\nScoring Rubric:")
+        lines.append("  1 = Needs significant improvement")
+        lines.append("  3 = Meets expectations")
+        lines.append("  5 = Exemplary")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class LabReportTool(BaseTool):
+    def execute(self, params):
+        title = params.get("title", params.get("experiment", "Lab Experiment")).strip()
+        course = params.get("course", params.get("subject", "Science"))
+        lines = [f"Lab Report: {title}", "=" * 40,
+                 f"Course: {course}\n",
+                 "1. Title Page",
+                 f"   Experiment: {title}", "   Name: ____________________",
+                 "   Date: ____________________", "   Partner(s): ____________________\n",
+                 "2. Objective / Purpose",
+                 "   What question is this experiment answering?\n",
+                 "3. Hypothesis",
+                 "   What do you predict will happen? Why?\n",
+                 "4. Materials",
+                 "   List all equipment and materials used\n",
+                 "5. Procedure",
+                 "   Step-by-step description (numbered):\n",
+                 "6. Data / Observations",
+                 "   | Trial | Measurement | Observations |",
+                 "   |-------|-------------|--------------|\n",
+                 "7. Calculations & Analysis",
+                 "   Show your work, formulas, and calculations\n",
+                 "8. Results",
+                 "   What did the data show? Include graphs if applicable.\n",
+                 "9. Discussion",
+                 "   • Were results expected?", "   • Sources of error",
+                 "   • What could be improved?\n",
+                 "10. Conclusion",
+                 f"   Summarize findings from {title}\n",
+                 "11. References",
+        ]
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class ResearchProposalTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "").strip()
+        course = params.get("course", params.get("subject", ""))
+        if not topic:
+            return {"success": False, "result": "Provide a research topic"}
+        lines = [f"Research Proposal: {topic}", "=" * 40,
+                 f"Course: {course or 'Independent Research'}\n",
+                 "1. Title",
+                 f"   A Study of {topic}\n",
+                 "2. Introduction / Background",
+                 f"   • Current state of research on {topic}", "   • Gap in knowledge this study addresses\n",
+                 "3. Research Question(s)",
+                 f"   • What is the relationship between X and {topic}?",
+                 "   • How can existing approaches be improved?\n",
+                 "4. Hypothesis",
+                 f"   It is hypothesized that {topic.lower()} will show significant correlation with...\n",
+                 "5. Methodology",
+                 "   • Research Design: ____________________",
+                 "   • Data Collection: ____________________",
+                 "   • Sample Size: ____________________",
+                 "   • Analysis Plan: ____________________\n",
+                 "6. Expected Outcomes",
+                 f"   • Anticipated findings related to {topic}",
+                 "   • Potential impact on the field\n",
+                 "7. Timeline",
+                 "   • Month 1-2: Literature review & proposal refinement",
+                 "   • Month 3-4: Data collection",
+                 "   • Month 5: Analysis",
+                 "   • Month 6: Writing & submission\n",
+                 "8. References",
+                 "   • At least 5 peer-reviewed sources",
+        ]
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class BookReportTool(BaseTool):
+    def execute(self, params):
+        title = params.get("title", params.get("book", "")).strip()
+        author = params.get("author", "").strip()
+        if not title:
+            return {"success": False, "result": "Provide book title"}
+        lines = [f"Book Report: {title}", "=" * 40,
+                 f"Author: {author or '(unknown)'}",
+                 "Student: ____________________  Date: ____________________\n",
+                 "1. Basic Information",
+                 f"   Title: {title}",
+                 f"   Author: {author or 'N/A'}",
+                 "   Genre: ____________________",
+                 "   Publication Date: ____________________\n",
+                 "2. Summary (3-5 paragraphs)",
+                 "   • Setting: ____________________",
+                 "   • Main Characters: ____________________",
+                 "   • Plot Overview:",
+                 "     - Exposition (beginning):",
+                 "     - Rising Action (middle):",
+                 "     - Climax (turning point):",
+                 "     - Resolution (ending):\n",
+                 "3. Character Analysis",
+                 "   Choose one character and analyze their development:\n",
+                 "4. Theme Analysis",
+                 "   What is the main message or lesson?\n",
+                 "5. Personal Reflection",
+                 "   • What did you enjoy?",
+                 "   • What would you change?",
+                 "   • Would you recommend this book? Why?\n",
+                 "6. Vocabulary (5 new words with definitions)",
+        ]
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class PresentationOutlineTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "").strip()
+        slides = min(int(params.get("slides", params.get("count", 8))), 25)
+        duration = params.get("duration", params.get("minutes", f"{slides * 2} min"))
+        audience = params.get("audience", "general")
+        if not topic:
+            return {"success": False, "result": "Provide a presentation topic"}
+        lines = [f"Presentation Outline: {topic}", "=" * 40,
+                 f"Duration: {duration}  |  Audience: {audience}"] + [""]
+        slide_templates = [
+            ("Title Slide", f"{topic} — Presenter Name"),
+            ("Agenda / Overview", "What we will cover today"),
+            ("Introduction", f"Background and context of {topic}"),
+            ("Key Concept 1", f"First main idea about {topic}"),
+            ("Key Concept 2", f"Second main idea about {topic}"),
+            ("Key Concept 3", f"Third main idea about {topic}"),
+            ("Example / Case Study", f"Real-world application of {topic}"),
+            ("Data / Evidence", "Supporting statistics and research"),
+            ("Visual Aid", "Graph, diagram, or chart"),
+            ("Comparison", f"Different perspectives on {topic}"),
+            ("Interactive Element", "Discussion question or activity"),
+            ("Challenges", f"Current issues in {topic}"),
+            ("Future Directions", f"What's next for {topic}"),
+            ("Summary", "Key takeaways"),
+            ("Q&A", "Questions and discussion"),
+            ("References", "Sources and further reading"),
+        ]
+        for i in range(min(slides, len(slide_templates))):
+            name, desc = slide_templates[i]
+            lines.append(f"Slide {i+1}: {name}")
+            lines.append(f"  • {desc}")
+            lines.append(f"  • Key points to cover: (add 2-3 bullet points)")
+            lines.append("")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class DebateTopicTool(BaseTool):
+    def execute(self, params):
+        topic = params.get("topic", "").strip()
+        count = min(int(params.get("count", 3)), 10)
+        style = params.get("style", "standard")
+        if not topic:
+            return {"success": False, "result": "Provide a debate topic or subject area"}
+        points = {
+            "for": [
+                f"The evidence supports {topic} as a positive development",
+                f"{topic} leads to better outcomes for all stakeholders",
+                f"Historical precedent shows {topic} is the right approach",
+                f"Economic analysis confirms {topic} is beneficial",
+                f"Ethical considerations favor adopting {topic}",
+            ],
+            "against": [
+                f"The risks of {topic} outweigh the potential benefits",
+                f"{topic} creates unacceptable inequalities",
+                f"Alternative approaches are more effective than {topic}",
+                f"Long-term consequences of {topic} are negative",
+                f"{topic} violates fundamental principles",
+            ],
+        }
+        random.shuffle(points["for"])
+        random.shuffle(points["against"])
+        lines = [f"Debate: {topic}", "=" * 40,
+                 f"Style: {style.title()}\n",
+                 "Proposition (FOR):", "  The house believes that " + topic.lower(),
+                 "\nAffirmative Arguments:"]
+        for i, arg in enumerate(points["for"][:count], 1):
+            lines.append(f"  {i}. {arg}")
+        lines.append("\nOpposition (AGAINST):")
+        for i, arg in enumerate(points["against"][:count], 1):
+            lines.append(f"  {i}. {arg}")
+        lines.append("\nFormat Suggestions:")
+        lines.append("  • Opening statements (3 min each)")
+        lines.append("  • Rebuttal round (2 min each)")
+        lines.append("  • Cross-examination (5 min)")
+        lines.append("  • Closing arguments (2 min each)")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class WritingPromptTool(BaseTool):
+    def execute(self, params):
+        count = min(int(params.get("count", 5)), 20)
+        genre = params.get("genre", params.get("style", "any")).lower()
+        prompts = {
+            "narrative": [
+                "Write about a character who discovers a hidden door in their home.",
+                "You wake up with the ability to understand any language. What happens?",
+                "Write a story that begins with the sentence: 'It was never supposed to work.'",
+                "A stranger hands you a letter addressed to someone who died 50 years ago.",
+                "Describe a world where memories can be traded like currency.",
+            ],
+            "persuasive": [
+                "Argue for or against: Should schools eliminate homework?",
+                "Write a letter to your local government about an issue you care about.",
+                "Should social media be banned for users under 16? Defend your position.",
+                "Is artificial intelligence a threat or an opportunity? Make your case.",
+                "Should college education be free? Present your argument.",
+            ],
+            "descriptive": [
+                "Describe your ideal learning environment in vivid detail.",
+                "Write about a place that feels like home — using all five senses.",
+                "Describe a moment when everything changed, as if in slow motion.",
+                "Paint a picture of a city street at dawn.",
+                "Describe a piece of technology as if explaining it to someone from 100 years ago.",
+            ],
+            "expository": [
+                "Explain how something you use every day actually works.",
+                "Describe the process of learning a new skill from start to finish.",
+                "Compare and contrast two approaches to solving the same problem.",
+                "Write a step-by-step guide for something you do well.",
+                "Explain a complex idea in simple terms for a younger student.",
+            ],
+            "creative": [
+                "What if gravity suddenly stopped working for 24 hours?",
+                "Write a conversation between your phone and your laptop.",
+                "You find a message in a bottle — but it's an email from 10 years in the future.",
+                "If your pet could talk for one day, what would you discuss?",
+                "Design a new holiday and describe how it's celebrated.",
+            ],
+        }
+        if genre != "any" and genre in prompts:
+            pool = prompts[genre]
+        else:
+            pool = []
+            for g in prompts.values():
+                pool.extend(g)
+        random.shuffle(pool)
+        lines = [f"Writing Prompts", "=" * 40]
+        if genre != "any":
+            lines.append(f"Genre: {genre.title()}\n")
+        for i, p in enumerate(pool[:count], 1):
+            lines.append(f"{i}. {p}")
+            lines.append("")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class MathWordProblemTool(BaseTool):
+    def execute(self, params):
+        count = min(int(params.get("count", 5)), 15)
+        difficulty = params.get("difficulty", "medium").lower()
+        topic = params.get("topic", "general").lower()
+        problems = []
+        for i in range(1, count + 1):
+            if "age" in topic or difficulty == "easy":
+                a, b = random.randint(5, 15), random.randint(2, 10)
+                problems.append(
+                    f"{i}. Alex is {a} years old. Alex's parent is {a + b * 10} years old. "
+                    f"In how many years will Alex's parent be exactly twice Alex's age?\n"
+                    f"   [Answer: {a - 2 * a + (a + b * 10)} years]")
+            elif "money" in topic or "finance" in topic:
+                price, qty = random.randint(3, 50), random.randint(2, 10)
+                problems.append(
+                    f"{i}. A student buys {qty} notebooks at ${price} each. "
+                    f"Tax is 8%. What is the total cost?\n"
+                    f"   [Answer: ${price * qty * 1.08:.2f}]")
+            elif "speed" in topic or "distance" in topic:
+                speed, hours = random.randint(30, 70), random.randint(1, 5)
+                problems.append(
+                    f"{i}. A car travels at {speed} mph for {hours} hours. "
+                    f"How far does it travel? If it returns at {speed + 10} mph, how long does the return trip take?\n"
+                    f"   [Answer: Distance = {speed * hours} miles, Return time = {speed * hours / (speed + 10):.1f} hours]")
+            else:
+                a, b = random.randint(5, 50), random.randint(3, 20)
+                ops = random.choice(["add", "multiply", "area"])
+                if ops == "add":
+                    problems.append(
+                        f"{i}. A class has {a} students. {b} more join. "
+                        f"How many students total? Each student needs {random.randint(2, 5)} worksheets. How many sheets needed?\n"
+                        f"   [Answer: {a + b} students, {(a + b) * random.randint(2, 5)} sheets]")
+                elif ops == "multiply":
+                    problems.append(
+                        f"{i}. A teacher arranges {a} desks in {b} rows. "
+                        f"How many desks per row? If {random.randint(1, 3)} desks are broken, how many rows are complete?\n"
+                        f"   [Answer: {a // b} per row ({a % b} leftover)]")
+                else:
+                    problems.append(
+                        f"{i}. A rectangular classroom is {a}m × {b}m. "
+                        f"What is its area? What is the perimeter?\n"
+                        f"   [Answer: Area = {a * b}m², Perimeter = {2 * (a + b)}m]")
+        return {"success": True, "result": "Math Word Problems:\n" + "=" * 40 + "\n" + "\n\n".join(problems)}
+
+
+class ProjectPlannerTool(BaseTool):
+    def execute(self, params):
+        title = params.get("title", params.get("project", "Project")).strip()
+        weeks = min(int(params.get("weeks", params.get("duration", 6))), 20)
+        tasks_str = params.get("tasks", params.get("milestones", ""))
+        tasks = [t.strip() for t in tasks_str.split(",") if t.strip()] if tasks_str else []
+        lines = [f"Project Plan: {title}", "=" * 40, f"Duration: {weeks} weeks\n"]
+        if tasks:
+            lines.append("Major Milestones:")
+            for t in tasks:
+                lines.append(f"  • {t}")
+            lines.append("")
+        per_week = len(tasks) // weeks if tasks else 0
+        for w in range(1, weeks + 1):
+            lines.append(f"Week {w}:")
+            if tasks and w <= len(tasks):
+                lines.append(f"  🎯 Milestone: {tasks[w-1]}")
+            lines.append(f"  Tasks: ______________________________")
+            lines.append(f"  Deliverables: _______________________")
+            lines.append(f"  Status: [ ] Not Started  [ ] In Progress  [ ] Complete")
+            lines.append("")
+        lines.append("Resources Needed:")
+        lines.append("  • People: ____________________")
+        lines.append("  • Materials: ____________________")
+        lines.append("  • Budget: ____________________")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class SelfAssessmentTool(BaseTool):
+    def execute(self, params):
+        subject = params.get("subject", params.get("topic", "course"))
+        count = min(int(params.get("count", 5)), 15)
+        lines = [f"Self-Assessment: {subject.title()}", "=" * 40, "",
+                 "Student: ____________________  Date: ____________________\n",
+                 "Rate yourself on each skill (1 = Needs work, 3 = Competent, 5 = Excellent):\n"]
+        skill_areas = ["Understanding core concepts", "Applying knowledge to problems",
+                       "Critical thinking and analysis", "Collaboration and teamwork",
+                       "Communication of ideas", "Time management and organization",
+                       "Independent learning", "Creativity and innovation",
+                       "Attention to detail", "Active participation",
+                       "Using resources effectively", "Meeting deadlines",
+                       "Asking for help when needed", "Teaching others",
+                       "Connecting ideas across subjects"]
+        random.shuffle(skill_areas)
+        for s in skill_areas[:count]:
+            lines.append(f"  {s}")
+            lines.append(f"    1 ☐  2 ☐  3 ☐  4 ☐  5 ☐")
+            lines.append(f"    Evidence/Example: _______________________________")
+            lines.append("")
+        lines.append("\nReflection Questions:")
+        lines.append("  1. What am I most proud of?")
+        lines.append("  2. What was my biggest challenge?")
+        lines.append("  3. What will I do differently next time?")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class HomeworkHelperTool(BaseTool):
+    def execute(self, params):
+        subject = params.get("subject", params.get("topic", "math")).lower()
+        question = params.get("question", params.get("problem", "")).strip()
+        if not question:
+            # Generate guidance for common subjects
+            guides = {
+                "math": [
+                    "1. Read the problem carefully — what are you being asked to find?",
+                    "2. Identify what information is given and what's missing",
+                    "3. Choose the right formula or approach",
+                    "4. Solve step by step, showing all work",
+                    "5. Check your answer — does it make sense?"],
+                "science": [
+                    "1. State your hypothesis clearly",
+                    "2. Identify variables: independent, dependent, controlled",
+                    "3. Design a procedure that tests only one variable at a time",
+                    "4. Record all observations, even unexpected ones",
+                    "5. Draw conclusions based on evidence, not assumptions"],
+                "writing": [
+                    "1. Start with a strong thesis statement",
+                    "2. Outline 3 main body paragraphs with topic sentences",
+                    "3. Use evidence from sources to support each point",
+                    "4. Address counterarguments to strengthen your position",
+                    "5. Conclude by restating your thesis and its significance"],
+                "history": [
+                    "1. Identify the who, what, when, where, and why",
+                    "2. Consider multiple perspectives on the event",
+                    "3. Look for cause-and-effect relationships",
+                    "4. Connect to broader themes or patterns",
+                    "5. Evaluate primary vs secondary sources"],
+            }
+            lines = [f"Homework Help: {subject.title()}", "=" * 40,
+                     "General Study Tips:\n"]
+            guide = guides.get(subject, guides["math"])
+            lines.extend(guide)
+            return {"success": True, "result": "\n".join(lines)}
+        lines = [f"Homework Help: {subject.title()}", "=" * 40,
+                 f"Question: {question}", "",
+                 "Step-by-step guidance:",
+                 "  1. Understand what the question is asking",
+                 "  2. Break the problem into smaller parts",
+                 f"  3. Apply {subject} principles and formulas",
+                 "  4. Work through each part carefully",
+                 "  5. Verify your answer",
+                 "",
+                 "Tip: Try explaining the problem to someone else —",
+                 "it helps clarify your thinking!"]
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class FlashcardReviewTool(BaseTool):
+    def execute(self, params):
+        path = os.path.join(_STUDY_DIR, "flashcards.json")
+        deck = params.get("deck", "default")
+        count = min(int(params.get("count", 10)), 50)
+        try:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    cards = json.load(f)
+            else:
+                cards = []
+            pool = [c for c in cards if c.get("deck", "default") == deck]
+            if not pool:
+                return {"success": False, "result": f"No cards in deck '{deck}'"}
+            # Prioritize cards in lower boxes (spaced repetition)
+            pool.sort(key=lambda c: c.get("box", 0))
+            session = pool[:count]
+            random.shuffle(session)
+            lines = [f"Spaced Repetition: '{deck}' ({len(session)} cards)", "=" * 40, ""]
+            for i, card in enumerate(session, 1):
+                box = card.get("box", 0)
+                box_label = {0: "New", 1: "Review 1d", 2: "Review 3d", 3: "Review 7d",
+                             4: "Review 14d", 5: "Review 30d"}.get(box, f"Box {box}")
+                lines.append(f"Card {i} [{box_label}]:")
+                lines.append(f"  Q: {card['question']}")
+                lines.append(f"  A: ||{card['answer']}||")
+                lines.append("")
+            return {"success": True, "result": "\n".join(lines)}
+        except Exception as e:
+            return {"success": False, "result": f"Review error: {e}"}
+
+
+class TestReviewTool(BaseTool):
+    def execute(self, params):
+        subject = params.get("subject", params.get("topic", "the subject")).strip()
+        topics_str = params.get("topics", "")
+        topics = [t.strip() for t in topics_str.split(",") if t.strip()]
+        if not topics:
+            topics = [f"Key {subject} concepts", f"Important {subject} terms",
+                      f"{subject} formulas/equations", f"Common {subject} problems",
+                      f"{subject} examples and applications"]
+        lines = [f"Test Review: {subject.title()}", "=" * 40, "",
+                 "Format: [ ] Multiple Choice  [ ] Short Answer  [ ] Essay  [ ] Problems\n"]
+        lines.append("Study Checklist:")
+        for t in topics:
+            lines.append(f"  ☐ {t}")
+            lines.append(f"    - Review notes and textbook")
+            lines.append(f"    - Practice related problems")
+            lines.append(f"    - Create flashcards for key terms")
+            lines.append("")
+        lines.append("Key Concepts to Review:")
+        for i, t in enumerate(topics, 1):
+            lines.append(f"  {i}. {t}")
+        lines.append("\nPractice Problems:")
+        for i in range(3):
+            a, b = random.randint(2, 20), random.randint(2, 10)
+            lines.append(f"  {i+1}. Solve: {a} × {b} + {random.randint(1, 10)} = ?")
+        lines.append("\nStudy Tips:")
+        lines.append("  • Review over multiple days (don't cram)")
+        lines.append("  • Teach concepts to a study partner")
+        lines.append("  • Get 8 hours of sleep before the test")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class ClassroomGameTool(BaseTool):
+    def execute(self, params):
+        subject = params.get("subject", params.get("topic", "any subject")).strip()
+        duration = int(params.get("minutes", params.get("duration", 15)))
+        count = min(int(params.get("count", 3)), 8)
+        games = [
+            {
+                "name": "Quiz Bowl",
+                "desc": f"Teams compete answering {subject} questions. First team to buzz in gets a point.",
+                "setup": "Prepare 20+ questions in advance. Use a buzzer system or raise hands.",
+            },
+            {
+                "name": "Jeopardy!",
+                "desc": f"Categories based on {subject} topics with point values. Teams choose and answer.",
+                "setup": "Create a 5×5 grid with questions at 100-500 point values.",
+            },
+            {
+                "name": "Pictionary",
+                "desc": f"Students draw {subject} concepts while teammates guess.",
+                "setup": "Prepare cards with key terms. 60-second rounds per drawing.",
+            },
+            {
+                "name": "Who Wants to Be a Millionaire?",
+                "desc": f"Progressive difficulty {subject} questions with lifelines (50/50, ask the class).",
+                "setup": "15 questions ranging from easy to very hard.",
+            },
+            {
+                "name": "Escape Room",
+                "desc": f"Solve {subject} puzzles to unlock the next clue. First team to escape wins!",
+                "setup": "5-7 puzzles/challenges with a lock combination to escape.",
+            },
+            {
+                "name": "Scavenger Hunt",
+                "desc": f"Find items or information related to {subject} around the classroom or school.",
+                "setup": "Create a list of 15-20 items with {subject}-related clues.",
+            },
+            {
+                "name": "Board Race",
+                "desc": f"Two teams race to write answers to {subject} questions on the board.",
+                "setup": "Prepare questions. One student from each team writes the answer.",
+            },
+            {
+                "name": "Memory Match",
+                "desc": f"Match {subject} terms with their definitions in a card-flip game.",
+                "setup": "Create 15-20 pairs of term-definition cards.",
+            },
+        ]
+        random.shuffle(games)
+        lines = [f"Classroom Games: {subject}", "=" * 40, f"Time available: {duration} min\n"]
+        for i, game in enumerate(games[:count], 1):
+            lines.append(f"Game {i}: {game['name']}")
+            lines.append(f"  {game['desc']}")
+            lines.append(f"  Setup: {game['setup']}")
+            lines.append("")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class GoalSetterTool(BaseTool):
+    def execute(self, params):
+        subject = params.get("subject", params.get("topic", "academics")).strip()
+        count = min(int(params.get("count", 3)), 8)
+        period = params.get("period", params.get("timeframe", "this semester"))
+        lines = [f"SMART Goals: {subject.title()}", "=" * 40,
+                 f"Student: ____________________  Period: {period}\n",
+                 "A SMART goal is:\n",
+                 "  S — Specific (clear and precise)",
+                 "  M — Measurable (can track progress)",
+                 "  A — Achievable (realistic but challenging)",
+                 "  R — Relevant (connected to your learning)",
+                 "  T — Time-bound (has a deadline)\n",
+                 f"My {subject.title()} Goals for {period}:\n"]
+        goal_templates = [
+            f"I will improve my {subject} grade by earning at least {random.choice(['85','90','93'])}% "
+            f"on all remaining {subject} assignments.",
+            f"I will complete all {subject} homework on time, submitting at least {random.choice(['90','95','100'])}% "
+            f"by the deadline.",
+            f"I will spend at least {random.choice(['30','45','60'])} minutes each day reviewing {subject} material "
+            f"and taking notes.",
+            f"I will participate actively in {subject} class by asking at least {random.choice(['2','3','5'])} "
+            f"questions per week.",
+            f"I will form a {subject} study group and meet {random.choice(['weekly','twice a week'])} "
+            f"to review material together.",
+            f"I will complete all extra credit {subject} opportunities to raise my understanding and grade.",
+            f"I will visit office hours or tutoring at least {random.choice(['twice a month','once a week'])} "
+            f"for {subject} help.",
+            f"I will achieve at least {random.choice(['proficient','advanced'])} level on the {subject} assessment.",
+        ]
+        random.shuffle(goal_templates)
+        for i, template in enumerate(goal_templates[:count], 1):
+            lines.append(f"Goal {i}:")
+            lines.append(f"  {template}")
+            lines.append(f"  Action steps:")
+            lines.append(f"    1. ________________________________")
+            lines.append(f"    2. ________________________________")
+            lines.append(f"    3. ________________________________")
+            lines.append(f"  Check-in date: ____________________")
+            lines.append("")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class FieldTripTool(BaseTool):
+    def execute(self, params):
+        destination = params.get("destination", params.get("location", "a local museum")).strip()
+        subject = params.get("subject", params.get("topic", "science")).strip()
+        duration_hours = int(params.get("hours", params.get("duration", 4)))
+        grade = params.get("grade", params.get("level", "middle school"))
+        lines = [f"Field Trip Plan: {destination}", "=" * 40,
+                 f"Subject: {subject.title()} | Grade: {grade}",
+                 f"Duration: {duration_hours} hours\n",
+                 "Pre-Trip Preparation:",
+                 "  ☐ Permission slips sent home (due 2 weeks before)",
+                 "  ☐ Chaperones confirmed (1 per 5 students)",
+                 "  ☐ Transportation arranged",
+                 "  ☐ Emergency contact list prepared",
+                 "  ☐ First aid kit packed",
+                 "  ☐ Lesson objectives shared with students\n",
+                 "Learning Objectives:",
+                 f"  • Connect {subject} concepts to real-world at {destination}",
+                 f"  • Observe and document key {subject} phenomena",
+                 "  • Practice scientific observation and note-taking\n",
+                 "Schedule:",
+                 f"  {8:00d}:00 AM — Depart from school",
+                 f"  {9:00d}:00 AM — Arrive & orientation",
+                 f"  {9:30d}:00 AM — Guided tour/activity",
+                 f"  12:00 PM — Lunch break",
+                 f"  1:00 PM — Self-guided exploration / worksheet",
+                 f"  {2:30d}:00 PM — Depart for school\n",
+                 "Student Activities:",
+                 "  • Observation worksheet (complete during visit)",
+                 "  • Sketch 3 things you learned",
+                 "  • Write 5 questions for discussion\n",
+                 "Follow-Up Assignment:",
+                 f"  Write a 1-page reflection on how {destination} connects to what we learned about {subject}.",
+        ]
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class CaseStudyTool(BaseTool):
+    def execute(self, params):
+        title = params.get("title", params.get("case", "Case Study")).strip()
+        subject = params.get("subject", params.get("topic", ""))
+        lines = [f"Case Study Analysis: {title}", "=" * 40,
+                 f"Subject: {subject or 'General'}\n",
+                 "1. Case Summary",
+                 f"   Briefly describe the {title} case:",
+                 "   • Who is involved?",
+                 "   • What happened?",
+                 "   • When and where?",
+                 "   • Why is this significant?\n",
+                 "2. Background / Context",
+                 "   • Historical background",
+                 "   • Relevant factors (social, economic, political)",
+                 "   • Key stakeholders\n",
+                 "3. Problem Identification",
+                 "   • What are the main issues?",
+                 "   • What are the underlying causes?",
+                 "   • Who is affected and how?\n",
+                 "4. Analysis Framework",
+                 f"   • Apply relevant {subject or 'theoretical'} concepts",
+                 "   • Identify patterns and relationships",
+                 "   • Consider multiple perspectives\n",
+                 "5. Alternatives Considered",
+                 "   Option A: ______________________________",
+                 "     Pros: ______________________________",
+                 "     Cons: ______________________________",
+                 "   Option B: ______________________________",
+                 "     Pros: ______________________________",
+                 "     Cons: ______________________________\n",
+                 "6. Recommendation",
+                 "   • Which option is best and why?",
+                 "   • Implementation plan",
+                 "   • Expected outcomes\n",
+                 "7. Lessons Learned",
+                 "   • What does this case teach us?",
+                 "   • How can we apply these lessons?",
+        ]
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class NoteTemplateTool(BaseTool):
+    def execute(self, params):
+        style = params.get("style", params.get("format", "cornell")).lower()
+        topic = params.get("topic", params.get("subject", "Lecture"))
+        lines = [f"Note-Taking Template: {style.title()} Style", "=" * 40,
+                 f"Topic: {topic}\n"]
+        if style == "cornell":
+            lines.extend([
+                "+" + "-" * 30 + "+" + "-" * 40 + "+",
+                f"| {'Cue Column':30s} | {'Notes Column':40s} |",
+                f"| {'Questions/Main Ideas':30s} | {'Detailed notes from lecture':40s} |",
+                "+" + "-" * 30 + "+" + "-" * 40 + "+",
+                "|                               |                                        |",
+                "|  1. Key question:             |  • Main point 1:                      |",
+                "|                               |    - Detail:                          |",
+                "|                               |    - Detail:                          |",
+                "|                               |                                        |",
+                "|  2. Key question:             |  • Main point 2:                      |",
+                "|                               |    - Detail:                          |",
+                "|                               |    - Detail:                          |",
+                "|                               |                                        |",
+                "|  3. Key question:             |  • Main point 3:                      |",
+                "|                               |    - Detail:                          |",
+                "|                               |    - Detail:                          |",
+                "+" + "-" * 30 + "+" + "-" * 40 + "+",
+                f"| {'Summary (bottom):':73s} |",
+                f"| {'3-5 sentence summary of the page':73s} |",
+                "+" + "-" * 73 + "+",
+            ])
+        elif style == "outline":
+            lines.extend([
+                f"I. {topic} Overview",
+                "   A. Main concept 1",
+                "      1. Supporting detail",
+                "      2. Supporting detail",
+                "   B. Main concept 2",
+                "      1. Supporting detail",
+                "      2. Supporting detail",
+                f"II. Key {topic} Ideas",
+                "   A. Key idea 1",
+                "      1. Example / evidence",
+                "      2. Example / evidence",
+                "   B. Key idea 2",
+                "      1. Example / evidence",
+                "      — Important note or exception",
+                "III. Summary & Questions",
+                "   A. What I learned:",
+                "   B. Questions I still have:",
+            ])
+        elif style == "mapping":
+            lines.extend([
+                f"                         [{topic}]",
+                "                        /    |    \\",
+                "                       /     |     \\",
+                "              [Sub 1]    [Sub 2]    [Sub 3]",
+                "             /   |   \\   / | \\     / | \\",
+                "          [D]  [D] [D] [D] [D] [D] [D] [D] [D]",
+                "",
+                "Connections:",
+                "  • Sub 1 → Sub 2: relationship",
+                "  • Sub 2 → Sub 3: relationship",
+                "  • Key insights:",
+            ])
+        else:
+            lines.append(f"Styles: cornell, outline, mapping")
+        lines.append("\nReview Tips:")
+        lines.append("  • Review notes within 24 hours")
+        lines.append("  • Summarize each page in your own words")
+        lines.append("  • Connect new information to what you already know")
+        return {"success": True, "result": "\n".join(lines)}
+
+
+class StudyBreakTool(BaseTool):
+    def execute(self, params):
+        count = min(int(params.get("count", 5)), 15)
+        duration = int(params.get("minutes", params.get("duration", 5)))
+        activities = [
+            ("Stretch Break", "Stand up and stretch your arms, neck, and back. Reach for the sky for 10 seconds."),
+            ("Deep Breathing", "Inhale for 4 counts, hold for 4, exhale for 4. Repeat 5 times."),
+            ("Walk Around", "Walk around the room or house for 2 minutes. Look at something far away to rest your eyes."),
+            ("Water Refill", "Drink a glass of water. Dehydration causes fatigue and reduces focus."),
+            ("Doodle", "Take 30 seconds to doodle anything on your notebook margin."),
+            ("Power Pose", "Stand like a superhero for 2 minutes — it boosts confidence and energy."),
+            ("Eye Rest", "Close your eyes for 60 seconds. Visualize a calm, peaceful place."),
+            ("Shoulder Rolls", "Roll your shoulders forward 5 times, backward 5 times. Release tension."),
+            ("Positive Affirmation", "Tell yourself: 'I am focused, capable, and making progress.'"),
+            ("Quick Stretch", "Touch your toes, hold for 15 seconds. Then lean back, arching gently."),
+            ("Snack Time", "Eat a healthy snack — nuts, fruit, or yogurt. Avoid sugar crashes."),
+            ("Brain Game", "Name 5 things you can see, 4 you can touch, 3 you can hear, 2 you can smell, 1 you can taste."),
+            ("Desk Organize", "Spend 60 seconds tidying your workspace. A clean desk = a clear mind."),
+            ("Listen to Music", "Put on one song you love. Sing along if you want! Music resets your mood."),
+            ("Progressive Relaxation", "Tense your toes for 5 seconds, then release. Work up to your face — tense and release each muscle group."),
+        ]
+        random.shuffle(activities)
+        lines = [f"Study Break Ideas", "=" * 40,
+                 f"Each activity: ~{duration} minutes\n"]
+        for i, (name, desc) in enumerate(activities[:count], 1):
+            lines.append(f"{i}. {name}")
+            lines.append(f"   {desc}")
+            lines.append("")
+        lines.append("The Pomodoro Method: 25 min study + 5 min break, repeat 4× then take a longer break.")
+        return {"success": True, "result": "\n".join(lines)}
+
+
 class PortScannerTool(BaseTool):
-    COMMON_PORTS = [(21, "FTP"), (22, "SSH"), (23, "Telnet"), (25, "SMTP"), (53, "DNS"),
-                    (80, "HTTP"), (110, "POP3"), (143, "IMAP"), (443, "HTTPS"), (445, "SMB"),
+    COMMON_PORTS = [(21, "FTP"), (22, "SSH"), (23, "Telnet"), (25, "SMTP"),
+                    (53, "DNS"), (80, "HTTP"), (110, "POP3"), (143, "IMAP"), (443, "HTTPS"), (445, "SMB"),
                     (993, "IMAPS"), (995, "POP3S"), (1433, "MSSQL"), (1521, "Oracle"),
                     (2049, "NFS"), (3306, "MySQL"), (3389, "RDP"), (5432, "PostgreSQL"),
                     (5900, "VNC"), (6379, "Redis"), (8080, "HTTP-Proxy"), (8443, "HTTPS-Alt"),
@@ -5594,7 +6397,6 @@ class PortScannerTool(BaseTool):
                 return {"success": False, "result": "Invalid port list"}
         else:
             ports = [p[0] for p in self.COMMON_PORTS]
-        # Remove hostname from result if it resolves
         try:
             target_ip = socket.gethostbyname(host)
         except socket.gaierror:
@@ -6884,4 +7686,25 @@ def create_default_registry():
     registry.register("hash_id", HashIdentifierTool())
     registry.register("password_audit", PasswordAuditorTool())
     registry.register("threat_intel", ThreatIntelTool())
+    # Student & Teacher Tools batch 3 (20)
+    registry.register("plagiarism_check", PlagiarismCheckTool())
+    registry.register("peer_review", PeerReviewTool())
+    registry.register("lab_report", LabReportTool())
+    registry.register("research_proposal", ResearchProposalTool())
+    registry.register("book_report", BookReportTool())
+    registry.register("presentation_outline", PresentationOutlineTool())
+    registry.register("debate_topic", DebateTopicTool())
+    registry.register("writing_prompt", WritingPromptTool())
+    registry.register("math_word_problem", MathWordProblemTool())
+    registry.register("project_planner", ProjectPlannerTool())
+    registry.register("self_assessment", SelfAssessmentTool())
+    registry.register("homework_helper", HomeworkHelperTool())
+    registry.register("flashcard_review", FlashcardReviewTool())
+    registry.register("test_review", TestReviewTool())
+    registry.register("classroom_game", ClassroomGameTool())
+    registry.register("goal_setter", GoalSetterTool())
+    registry.register("field_trip", FieldTripTool())
+    registry.register("case_study", CaseStudyTool())
+    registry.register("note_template", NoteTemplateTool())
+    registry.register("study_break", StudyBreakTool())
     return registry
